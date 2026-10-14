@@ -35,6 +35,9 @@ from PySide6.QtGui import (
     QPolygonF,
 )
 
+import sys
+from pathlib import Path
+
 
 class Config:
 
@@ -63,13 +66,21 @@ class Config:
 
     ROJO = "#E11D2E"
     ROJO_OSCURO = "#9B0F1E"
-    AZUL_SOMBRA = "#008CFF"      # rgb(0,140,255) del .shadow__btn
-    AZUL_ENTRAR = "#006BB3"      # rgb(0,107,179) del .button
-    GRIS_CAMPO = "#F3F3F3"       # fondo del .input
-    AZUL_INPUT = "#4A9DEC"       # borde/halo del .input
-    FONDO_FORM = "#EDF3FD"       # fondo del .form
+    AZUL_SOMBRA = "#008CFF"      
+    AZUL_ENTRAR = "#006BB3"      
+    GRIS_CAMPO = "#F3F3F3"       
+    AZUL_INPUT = "#4A9DEC"      
+    FONDO_FORM = "#EDF3FD"       
     FONDO_FORM_CAMPO = "#E4ECF5"
     AZUL_FORM = "#00BFFF"
+    FONDO_FORM_BORDE = "#C9D8EE"
+    TEXTO_OSCURO = "#1E2A3A"       # texto sobre campos, tarjetas y menús claros
+
+    # Recursos (imágenes) del proyecto
+    CARPETA_RECURSOS = "Recursos" 
+    LOGO_PRINCIPAL = "sigeacircular.png"
+    LOGO_ZAFIRO = "zafiroclaroclaroo45.png"
+    ICONO_APP = ["inicio_sesion.png", "icono.png", "sigea.ico", "sigea.png", "sigeacircular.png"]
 
     FUENTE_BASE = "poppins"
 
@@ -108,6 +119,43 @@ def sombra(widget, color, blur=20, dy=0, alpha=255):
     efecto.setOffset(0, dy)
     widget.setGraphicsEffect(efecto)
     return efecto
+
+def carpeta_recursos():
+    """Carpeta de recursos del proyecto (sin importar mayúsculas); None si no existe."""
+    bases = []
+    if getattr(sys, "_MEIPASS", None):               # ejecutable de PyInstaller
+        bases.append(Path(sys._MEIPASS))
+    aqui = Path(__file__).resolve().parent
+    bases += [aqui.parent, aqui, Path.cwd()]          # raíz del proyecto (donde está main.py)
+    objetivo = Config.CARPETA_RECURSOS.lower()
+    for base in bases:
+        if not base.is_dir():
+            continue
+        for hijo in base.iterdir():
+            if hijo.is_dir() and hijo.name.lower() == objetivo:
+                return hijo
+    return None
+
+
+def ruta_recurso(nombre):
+    """Path de un archivo dentro de la carpeta de recursos (sin importar mayúsculas), o None."""
+    carpeta = carpeta_recursos()
+    if carpeta is None:
+        return None
+    for archivo in carpeta.iterdir():
+        if archivo.is_file() and archivo.name.lower() == nombre.lower():
+            return archivo
+    return None
+
+
+def buscar_icono_app():
+    """Ruta (str) del icono de SIGEA según Config.ICONO_APP, o None."""
+    for nombre in Config.ICONO_APP:
+        ruta = ruta_recurso(nombre)
+        if ruta:
+            return str(ruta)
+    return None
+
 
 class _BotonAnimado(QPushButton):
 
@@ -266,7 +314,7 @@ class BotonSecundario(_BotonAnimado):
 
         f = fuente(10, False, 1.5 + 1.5 * t)
         p.setFont(f)
-        p.setPen(mezclar(Config.TEXTO_TITULO, "#FFFFFF", t))
+        p.setPen(mezclar(Config.TEXTO_OSCURO, "#FFFFFF", t))
         tw = QFontMetrics(f).horizontalAdvance(self._texto)
         ic = 0 if self.icon().isNull() else 26
         x0 = (w - tw - ic) / 2
@@ -406,7 +454,6 @@ class Spinner(QWidget):
             p.restore()
 
 class CampoTexto(QLineEdit):
-    """Campo gris que en hover/focus se vuelve blanco, con borde azul y halo."""
 
     def __init__(self, placeholder="", password=False, alto=40, parent=None):
         super().__init__(parent)
@@ -422,7 +469,7 @@ class CampoTexto(QLineEdit):
                 border: 2px solid transparent;
                 border-radius: 10px;
                 padding-left: 12px;
-                color: {Config.TEXTO_TITULO};
+                color: {Config.TEXTO_OSCURO};
             }}
             QLineEdit:hover, QLineEdit:focus {{
                 background-color: #FFFFFF;
@@ -466,14 +513,14 @@ class GlassRadioGroup(QWidget):
         self,
         opciones,
         colores=None,
-        color_fondo="rgba(255, 255, 255, 16)",
-        color_texto="#E5E5E5",
+        color_fondo="rgba(53, 66, 119, 24)",
+        color_texto="#7D8A95",
         color_texto_activo="#FFFFFF",
         parent=None,
     ):
         super().__init__(parent)
         self._opciones = list(opciones)
-        self._colores = colores or [Config.AZUL_CLARO, Config.CIAN, Config.AZUL_PRINCIPAL]
+        self._colores = colores or [Config.AZUL_BOTON, Config.AZUL_ENTRAR, Config.AZUL_PRINCIPAL]
         self._indice = 0
         self._botones = []
 
@@ -482,7 +529,7 @@ class GlassRadioGroup(QWidget):
         self.setStyleSheet(f"""
             #glassRadioGroup {{
                 background-color: {color_fondo};
-                border: 1px solid rgba(255, 255, 255, 40);
+                border: 1px solid rgba(53, 66, 119, 50);
                 border-radius: 16px;
             }}
         """)
@@ -605,7 +652,7 @@ class _ItemBarra(_BotonAnimado):
         if self._expansion > 0.05:
             p.setOpacity(self._expansion)
             p.setFont(fuente(9, True))
-            p.setPen(QColor(Config.TEXTO_TITULO))
+            p.setPen(QColor(Config.TEXTO_OSCURO))
             p.translate((1 - self._expansion) * 20, 0)
             p.drawText(QRectF(52, 0, w - 52, h), Qt.AlignVCenter | Qt.AlignLeft, self._texto)
 
@@ -804,6 +851,7 @@ class CampoFlotante(QWidget):
     def __init__(self, etiqueta, password=False, parent=None):
         super().__init__(parent)
         self.setFixedHeight(50)
+        self.setFixedWidth(200)
         self._f = 0.0
         self.entrada = QLineEdit(self)
         if password:
@@ -811,11 +859,11 @@ class CampoFlotante(QWidget):
         self.entrada.setStyleSheet(f"""
             QLineEdit {{
                 background-color: {Config.FONDO_FORM_CAMPO};
-                color: #FFFFFF;
+                color: #3c3c3c;
                 border: 1px solid rgba(105, 105, 105, 100);
                 border-radius: 10px;
-                padding: 19px 5px 3px 10px;
-                font-size: 13px;
+                padding: 16px 5px 3px 10px;
+                font-size: 12px;
             }}
             QLineEdit:focus {{ border: 1px solid {Config.AZUL_FORM}; }}
         """)
@@ -824,7 +872,7 @@ class CampoFlotante(QWidget):
         self._anim = QPropertyAnimation(self, b"flota", self)
         self._anim.setDuration(300)
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
-        self.entrada.textChanged.connect(self._revisar)
+        self.entrada.textChanged.connect(lambda _texto: self._revisar())
         self.entrada.installEventFilter(self)
         self._colocar()
 
@@ -837,8 +885,10 @@ class CampoFlotante(QWidget):
 
     flota = Property(float, _get_f, _set_f)
 
-    def _revisar(self):
-        destino = 1.0 if (self.entrada.hasFocus() or self.entrada.text()) else 0.0
+    def _revisar(self, foco=None):
+        if foco is None:
+            foco = self.entrada.hasFocus()
+        destino = 1.0 if (foco or self.entrada.text()) else 0.0
         if destino != self._anim.endValue():
             self._anim.stop()
             self._anim.setStartValue(self._f)
@@ -846,19 +896,24 @@ class CampoFlotante(QWidget):
             self._anim.start()
 
     def eventFilter(self, obj, ev):
-        if obj is self.entrada and ev.type() in (QEvent.FocusIn, QEvent.FocusOut):
-            QTimer.singleShot(0, self._revisar)
+        # Se reacciona al evento directamente (sin QTimer diferido): un temporizador
+        # pendiente fallaba con "already deleted" al cerrar la ventana.
+        if obj is self.entrada:
+            if ev.type() == QEvent.FocusIn:
+                self._revisar(True)
+            elif ev.type() == QEvent.FocusOut:
+                self._revisar(False)
         return super().eventFilter(obj, ev)
 
     def _colocar(self):
         f = self._f
-        c = mezclar(QColor(255, 255, 255, 128), Config.AZUL_FORM, f)
+        c = mezclar(QColor(128, 128, 128, 128), Config.AZUL_FORM, f)
         self._etiqueta.setFont(fuente(9.5 - 2.5 * f, f > 0.5, 0))
         self._etiqueta.setStyleSheet(
             f"color: rgba({c.red()},{c.green()},{c.blue()},{c.alpha()}); background: transparent;"
         )
         self._etiqueta.adjustSize()
-        self._etiqueta.move(11, int(14 * (1 - f) + 3 * f))
+        self._etiqueta.move(11, int(8 * (1 - f) + 2 * f))
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -871,55 +926,31 @@ class CampoFlotante(QWidget):
     def limpiar(self):
         self.entrada.clear()
 
-
-class TituloPulso(QWidget):
-    def __init__(self, texto, parent=None):
+class TituloFormulario(QWidget):
+    def __init__(self, texto, icono=None, parent=None):
         super().__init__(parent)
-        self._texto = texto
-        self._p = 0.0
-        self.setFixedHeight(36)
-        self._anim = QPropertyAnimation(self, b"pulso", self)
-        self._anim.setDuration(1000)
-        self._anim.setStartValue(0.0)
-        self._anim.setEndValue(1.0)
-        self._anim.setLoopCount(-1)
-        self._anim.setEasingCurve(QEasingCurve.Linear)
-        self._anim.start()
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 8, 0, 8)
+        lay.setSpacing(10)
+        lay.addStretch()
 
-    def _get_p(self):
-        return self._p
+        if icono:
+            etiqueta_icono = QLabel()
+            etiqueta_icono.setStyleSheet("background: transparent;")
+            qicono = icono if isinstance(icono, QIcon) else QIcon(str(icono))
+            etiqueta_icono.setPixmap(qicono.pixmap(28, 28))
+            lay.addWidget(etiqueta_icono)
 
-    def _set_p(self, v):
-        self._p = v
-        self.update()
-
-    pulso = Property(float, _get_p, _set_p)
-
-    def paintEvent(self, ev):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        h = self.height()
-        c = QColor(Config.AZUL_FORM)
-        centro = QPointF(10, h / 2)
-        p.setPen(Qt.NoPen)
-        p.setBrush(c)
-        p.drawEllipse(centro, 9, 9)
-        onda = QColor(c)
-        onda.setAlphaF(1 - self._p)
-        p.setBrush(onda)
-        r = 9 * (0.9 + 0.9 * self._p)
-        p.drawEllipse(centro, r, r)
-        p.setFont(fuente(17, True, -1))
-        p.setPen(c)
-        p.drawText(QRectF(32, 0, self.width() - 32, h), Qt.AlignVCenter | Qt.AlignLeft, self._texto)
-
+        self.titulo = QLabel(texto)
+        self.titulo.setFont(fuente(17, True, -1))
+        self.titulo.setStyleSheet(f"color: {Config.AZUL_FORM}; background: transparent;")
+        lay.addWidget(self.titulo)
+        lay.addStretch()
 
 class TarjetaFormulario(QFrame):
-    """Tarjeta oscura con título pulsante, mensaje, campos flotantes y botón de envío."""
-
     enviado = Signal()
 
-    def __init__(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=350, parent=None):
+    def __init__(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=450, parent=None, icono=None):
         super().__init__(parent)
         self.setObjectName("tarjetaFormulario")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -927,19 +958,25 @@ class TarjetaFormulario(QFrame):
         self.setStyleSheet(f"""
             #tarjetaFormulario {{
                 background-color: {Config.FONDO_FORM};
-                border: 1px solid #333333;
+                border: 1px solid {Config.FONDO_FORM_BORDE};
                 border-radius: 20px;
             }}
         """)
         self._lay = QVBoxLayout(self)
-        self._lay.setContentsMargins(20, 20, 20, 20)
+        self._lay.setContentsMargins(36, 0, 36, 0)
         self._lay.setSpacing(10)
+        # Fila de logos: se inserta arriba la primera vez que se llama a agregar_logo()
+        self.fila_logos = QHBoxLayout()
+        self.fila_logos.setAlignment(Qt.AlignCenter)
+        self.fila_logos.setSpacing(100)
+        self._fila_logos_puesta = False
 
-        self._lay.addWidget(TituloPulso(titulo))
+        self._lay.addWidget(TituloFormulario(titulo, icono))
         if mensaje:
             m = QLabel(mensaje)
             m.setWordWrap(True)
-            m.setStyleSheet("color: rgba(255,255,255,178); font-size: 12px; background: transparent;")
+            m.setStyleSheet("color: rgba(169,169,169,169); font-size: 14px; background: transparent; font-weight: bold;")
+            m.setAlignment(Qt.AlignCenter)
             self._lay.addWidget(m)
 
         self.campos = {}
@@ -959,7 +996,7 @@ class TarjetaFormulario(QFrame):
             self.boton_enviar.setStyleSheet(f"""
                 QPushButton {{ background-color: {Config.AZUL_FORM}; color: #FFFFFF;
                                border: none; border-radius: 10px; }}
-                QPushButton:hover {{ background-color: rgba(0,191,255,150); }}
+                QPushButton:hover {{ background-color: #00A6E0; }}
             """)
             self.boton_enviar.clicked.connect(self.enviado.emit)
             self._lay.addWidget(self.boton_enviar)
@@ -967,8 +1004,35 @@ class TarjetaFormulario(QFrame):
         if pie:
             f = QLabel(pie)
             f.setAlignment(Qt.AlignCenter)
-            f.setStyleSheet("color: rgba(255,255,255,178); font-size: 12px; background: transparent;")
+            f.setStyleSheet(f"color: {Config.TEXTO_SUBTITULO}; font-size: 12px; background: transparent;")
             self._lay.addWidget(f)
+
+    def agregar_logo(self, ruta, ancho=100, alto=70):
+        imagen = QPixmap(str(ruta))
+
+        if imagen.isNull():
+            print(f"No se pudo cargar el logo: {ruta}")
+            return
+
+        etiqueta = QLabel()
+        etiqueta.setFixedSize(ancho, alto)
+        etiqueta.setAlignment(Qt.AlignCenter)
+        etiqueta.setStyleSheet(
+            "background: transparent; border: none;"
+        )
+        etiqueta.setPixmap(
+            imagen.scaled(
+                ancho,
+                alto,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+        )
+
+        self.fila_logos.addWidget(etiqueta)
+        if not self._fila_logos_puesta:
+            self._lay.insertLayout(0, self.fila_logos)
+            self._fila_logos_puesta = True
 
     def _posicion_insercion(self):
         if self.boton_enviar is not None:
@@ -986,7 +1050,7 @@ class TarjetaFormulario(QFrame):
         """Agrega un campo flotante en el orden actual y lo devuelve."""
         campo = CampoFlotante(etiqueta, password)
         self.campos[etiqueta] = campo
-        self.agregar_widget(campo)
+        self.agregar_widget(campo, Qt.AlignHCenter)
         return campo
 
     def valores(self):
@@ -1006,6 +1070,9 @@ class VentanaBase(QWidget):
     def configurar_ventana(self, titulo, ancho, alto):
         self.setWindowTitle(titulo)
         self.setFixedSize(ancho, alto)
+        icono = buscar_icono_app()
+        if icono:
+            self.setWindowIcon(QIcon(icono))
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: {Config.FONDO_VENTANA};
@@ -1077,9 +1144,8 @@ class VentanaBase(QWidget):
         """)
         return tarjeta
 
-    def crear_formulario(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=350):
-        return TarjetaFormulario(titulo, mensaje, campos, texto_boton, pie, ancho, self)
-
+    def crear_formulario(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=250, icono=None):
+        return TarjetaFormulario(titulo, mensaje, campos, texto_boton, pie, ancho, self, icono=icono)
     #  campos y labels 
     def crear_campo_texto(self, placeholder="", password=False, alto=40):
         return CampoTexto(placeholder, password, alto)
@@ -1138,28 +1204,42 @@ class VentanaBase(QWidget):
         titulo="SIGEA",
         subtitulo="Sistema de Gestión Académica",
         institucion="ZAFIRO TECH",
-        ruta_icono=None,
+        rutas_logos=None,
     ):
         layout = QVBoxLayout(parent)
         layout.setContentsMargins(50, 50, 50, 50)
         layout.setSpacing(0)
 
-        icono = QLabel()
-        icono.setFixedSize(90, 90)
-        icono.setAlignment(Qt.AlignCenter)
-        icono.setStyleSheet("""
-            QLabel {
-                background-color: #1E293B;
-                border-radius: 45px;
-                color: white;
-                font-size: 30px;
-            }
-        """)
-        if ruta_icono:
-            icono.setPixmap(
-                QPixmap(ruta_icono).scaled(52, 52, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        if rutas_logos is None:
+            rutas_logos = [ruta_recurso(Config.LOGO_PRINCIPAL)]
+
+        fila_logos = QHBoxLayout()
+        fila_logos.setSpacing(14)
+
+        for ruta in rutas_logos:
+            if not ruta:
+                print(f"No se encontró '{Config.LOGO_PRINCIPAL}' en la carpeta de recursos")
+                continue
+            imagen = QPixmap(str(ruta))
+
+            if imagen.isNull():
+                print(f"No se pudo cargar el logo: {ruta}")
+                continue
+
+            etiqueta = QLabel()
+            etiqueta.setFixedSize(190, 190)
+            etiqueta.setAlignment(Qt.AlignCenter)
+            etiqueta.setStyleSheet("background: transparent; border: none;")
+            etiqueta.setPixmap(
+                imagen.scaled(
+                    190,
+                    190,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
             )
-        layout.addWidget(icono, alignment=Qt.AlignLeft)
+            fila_logos.addWidget(etiqueta)
+        layout.addLayout(fila_logos)
         layout.addSpacing(35)
 
         layout.addWidget(self.crear_label_titulo(titulo, Config.FONT_LOGO, Config.TEXTO_CLARO))
@@ -1172,7 +1252,36 @@ class VentanaBase(QWidget):
         layout.addWidget(linea)
         layout.addStretch()
 
+        pie = QHBoxLayout()
+        pie.setSpacing(10)
+
+        ruta_zafiro = ruta_recurso(Config.LOGO_ZAFIRO)
+        imagen_zafiro = QPixmap(str(ruta_zafiro)) if ruta_zafiro else QPixmap()
+
+        if not imagen_zafiro.isNull():
+            logo_zafiro = QLabel()
+            logo_zafiro.setFixedSize(45, 45)
+            logo_zafiro.setAlignment(Qt.AlignCenter)
+            logo_zafiro.setStyleSheet(
+                "background: transparent; border: none;"
+            )
+            logo_zafiro.setPixmap(
+                imagen_zafiro.scaled(
+                    45,
+                    45,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            )
+            pie.addWidget(logo_zafiro)
+        else:
+            print(f"No se encontró '{Config.LOGO_ZAFIRO}' en la carpeta de recursos")
+
         campus = QLabel(institucion)
-        campus.setStyleSheet("QLabel { color: #CBD5E1; font-size: 11px; background: transparent; }")
-        layout.addWidget(campus)
+        campus.setStyleSheet(
+            "QLabel { color: #CBD5E1; font-size: 12px; background: transparent; }"
+        )
+        pie.addWidget(campus)
+
+        layout.addLayout(pie)
         return layout

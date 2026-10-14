@@ -1,23 +1,23 @@
 from db import obtener_conexion
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 conexion = obtener_conexion()
 
 if conexion:
     try:
         with conexion.cursor() as cursor:
             cursor.execute("""
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                ORDER BY table_name;
+                SELECT
+                    current_database(),
+                    current_user,
+                    inet_server_addr();
             """)
 
-            print("Tablas de SIGEA:")
-            for fila in cursor.fetchall():
-                print("-", fila[0])
+            base, usuario, servidor = cursor.fetchone()
+
+            print("Conexión exitosa")
+            print("Base de datos:", base)
+            print("Usuario:", usuario)
+            print("Servidor:", servidor)
 
     finally:
         conexion.close()
