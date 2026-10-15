@@ -1059,6 +1059,157 @@ class TarjetaFormulario(QFrame):
     def limpiar(self):
         for c in self.campos.values():
             c.limpiar()
+# ======================================================================
+#  MENÚ PRINCIPAL: cabecera + tarjetas con opciones y subopciones
+# ======================================================================
+def icono_casa(tam=44, color="#FFFFFF"):
+    """Casita dibujada por código (se usa si no hay imagen en recursos)."""
+    pm = QPixmap(tam, tam)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    c = QColor(color)
+    pen = QPen(c, tam * 0.07, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    m = tam * 0.12
+    techo = QPolygonF([QPointF(m, tam * 0.48), QPointF(tam / 2, m), QPointF(tam - m, tam * 0.48)])
+    p.drawPolyline(techo)
+    p.drawRect(QRectF(tam * 0.22, tam * 0.48, tam * 0.56, tam * 0.40))      # cuerpo
+    p.drawRect(QRectF(tam * 0.43, tam * 0.62, tam * 0.14, tam * 0.26))      # puerta
+    p.end()
+    return pm
+
+
+class CabeceraMenu(QWidget):
+    """Fila superior: [icono] TÍTULO ........ [botón a la derecha]."""
+
+    def __init__(self, titulo, icono=None, boton=None, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background: transparent;")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(14)
+
+        etiqueta_icono = QLabel()
+        etiqueta_icono.setFixedSize(46, 46)
+        etiqueta_icono.setAlignment(Qt.AlignCenter)
+        if icono:
+            pm = (icono if isinstance(icono, QIcon) else QIcon(str(icono))).pixmap(44, 44)
+        else:
+            pm = QPixmap()
+        if pm.isNull():
+            pm = icono_casa(44, Config.TEXTO_CLARO)
+        etiqueta_icono.setPixmap(pm)
+        lay.addWidget(etiqueta_icono)
+
+        self.titulo = QLabel(titulo)
+        self.titulo.setFont(fuente(30, True, 2))
+        self.titulo.setStyleSheet(f"color: {Config.TEXTO_CLARO}; background: transparent;")
+        lay.addWidget(self.titulo)
+        lay.addStretch()
+
+        if boton is not None:
+            lay.addWidget(boton, 0, Qt.AlignVCenter)
+
+
+class _ItemMenu(QPushButton):
+    """Opción clicable de una tarjeta de menú (texto plano, resalta al pasar el mouse)."""
+
+    def __init__(self, texto, nivel=0, parent=None):
+        super().__init__(texto, parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFlat(True)
+        self.setFixedHeight(32)
+        self.setFont(fuente(10.5, False, 0.2))
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Config.TEXTO_OSCURO};
+                border: none;
+                border-radius: 8px;
+                text-align: left;
+                padding-left: {10 + nivel * 20}px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(0, 191, 255, 38);
+                color: {Config.AZUL_ENTRAR};
+            }}
+            QPushButton:pressed {{
+                background-color: rgba(0, 191, 255, 80);
+            }}
+        """)
+
+
+class TarjetaMenu(QFrame):
+    """
+    Tarjeta clara con título (y icono opcional) y una lista de opciones.
+    items: ["Consultas",
+            ("Inscripciones", ["Alta de alumno", "Baja de alumno"]),   # grupo con subopciones
+            ...]
+    Al hacer clic emite  seleccionado("TÍTULO/Grupo/Opción").
+    """
+    seleccionado = Signal(str)
+
+    def __init__(self, titulo, items, icono=None, parent=None):
+        super().__init__(parent)
+        self._titulo = titulo
+        self.setObjectName("tarjetaMenu")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet(f"""
+            #tarjetaMenu {{
+                background-color: {Config.FONDO_FORM};
+                border: 1px solid {Config.FONDO_FORM_BORDE};
+                border-radius: 18px;
+            }}
+        """)
+        self._lay = QVBoxLayout(self)
+        self._lay.setContentsMargins(18, 18, 18, 18)
+        self._lay.setSpacing(2)
+
+        # encabezado: icono + título
+        fila = QHBoxLayout()
+        fila.setSpacing(10)
+        if icono:
+            et = QLabel()
+            et.setStyleSheet("background: transparent;")
+            qicono = icono if isinstance(icono, QIcon) else QIcon(str(icono))
+            et.setPixmap(qicono.pixmap(24, 24))
+            fila.addWidget(et)
+        t = QLabel(titulo)
+        t.setFont(fuente(13, True, 1))
+        t.setStyleSheet(f"color: {Config.TEXTO_OSCURO}; background: transparent;")
+        fila.addWidget(t)
+        fila.addStretch()
+        self._lay.addLayout(fila)
+
+        linea = QFrame()
+        linea.setFixedHeight(2)
+        linea.setStyleSheet(f"background-color: {Config.AZUL_FORM}; border: none; border-radius: 1px;")
+        self._lay.addSpacing(4)
+        self._lay.addWidget(linea)
+        self._lay.addSpacing(8)
+
+        for item in items:
+            self._agregar(item, 0, titulo)
+        self._lay.addStretch()
+
+    def _agregar(self, item, nivel, ruta):
+        if isinstance(item, (tuple, list)) and len(item) == 2 and isinstance(item[1], (list, tuple)):
+            grupo, hijos = item
+            etiqueta = _ItemMenu(grupo, nivel, self)                         
+            etiqueta.setFont(fuente(10.5, True, 0.2))
+            etiqueta.setFixedHeight(32)
+            etiqueta.setStyleSheet(
+                f"color: {Config.AZUL_ENTRAR}; background: transparent; padding-left: {14 + nivel * 20}px;"
+            )
+            self._lay.addWidget(etiqueta)
+            for hijo in hijos:
+                self._agregar(hijo, nivel + 1, f"{ruta}/{grupo}")
+        else:
+            boton = _ItemMenu(item, nivel, self)
+            boton.clicked.connect(lambda _=False, r=f"{ruta}/{item}": self.seleccionado.emit(r))
+            self._lay.addWidget(boton)
 
 class VentanaBase(QWidget):
 
@@ -1146,7 +1297,16 @@ class VentanaBase(QWidget):
 
     def crear_formulario(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=250, icono=None):
         return TarjetaFormulario(titulo, mensaje, campos, texto_boton, pie, ancho, self, icono=icono)
-    #  campos y labels 
+    
+    def crear_cabecera_menu(self, titulo, icono=None, boton=None):
+        """Fila superior del menú: icono + título a la izquierda y un botón (Salir) a la derecha."""
+        return CabeceraMenu(titulo, icono, boton, self)
+
+    def crear_tarjeta_menu(self, titulo, items, icono=None):
+        """Tarjeta del menú principal con opciones y subopciones (ver TarjetaMenu)."""
+        return TarjetaMenu(titulo, items, icono, self)
+
+    #  campos y labels
     def crear_campo_texto(self, placeholder="", password=False, alto=40):
         return CampoTexto(placeholder, password, alto)
 

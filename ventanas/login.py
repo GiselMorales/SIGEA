@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QTimer
 from pathlib import Path
 from PySide6.QtWidgets import QLabel, QHBoxLayout, QVBoxLayout
 from ventanas.ventana import VentanaBase, Config, ruta_recurso
+from ventanas.menu_secretaria import VentanaMenuAdmin
 
 carpeta_recursos = Path(__file__).resolve().parent.parent / "Recursos"
 
@@ -143,17 +144,17 @@ class VentanaLogin(VentanaBase):
         ),
 )
 
-def _finalizar_verificacion(self, usuario, tipo_usuario):
-    self.spinner.detener()
-    self._verificando = False
-    self.boton_login.setEnabled(True)
+    def _finalizar_verificacion(self, usuario, tipo_usuario):
+        self.spinner.detener()
+        self._verificando = False
+        self.boton_login.setEnabled(True)
 
-    if tipo_usuario in ("Secretaría", "Administrativo"):
-        self.ventana_menu = VentanaMenu(usuario)
-        self.ventana_menu.show()
-        self.close()
-    else:
-        self.mostrar_mensaje(
-            "SIGEA",
-            f"Bienvenido(a), {usuario}. Acceso como docente."
-        )
+        if tipo_usuario in ("Secretaría", "Administrativo"):
+            self.ventana_menu = VentanaMenuAdmin()
+            self.ventana_menu.show()
+            self.close()
+        else:
+            self.mostrar_mensaje(
+                "SIGEA",
+                f"Bienvenido(a), {usuario}. Acceso como docente."
+            )
