@@ -77,10 +77,10 @@ class Config:
     TEXTO_OSCURO = "#1E2A3A"       # texto sobre campos, tarjetas y menús claros
 
     # Recursos (imágenes) del proyecto
-    CARPETA_RECURSOS = "Recursos" 
+    CARPETA_RECURSOS = "recursos"  # también se acepta "Recursos", "RECURSOS", etc.
     LOGO_PRINCIPAL = "sigeacircular.png"
     LOGO_ZAFIRO = "zafiroclaroclaroo45.png"
-    ICONO_APP = ["inicio_sesion.png", "icono.png", "sigea.ico", "sigea.png", "sigeacircular.png"]
+    ICONO_APP = ["icono.ico", "icono.png", "sigea.ico", "sigea.png", "sigeacircular.png"]
 
     FUENTE_BASE = "poppins"
 
@@ -166,10 +166,14 @@ class _BotonAnimado(QPushButton):
         self._texto = texto
         self.setCursor(Qt.PointingHandCursor)
         if icono:
-            self.setIcon(icono if isinstance(icono, QIcon) else QIcon(icono))
+            self.setIcon(icono if isinstance(icono, QIcon) else QIcon(str(icono)))
         self._anim = QPropertyAnimation(self, b"hover", self)
         self._anim.setDuration(300)
         self._anim.setEasingCurve(QEasingCurve.OutCubic)
+
+    def setText(self, texto):
+       self._texto = texto
+       super().setText(texto)
 
     def _get_hover(self):
         return self._t
@@ -851,7 +855,6 @@ class CampoFlotante(QWidget):
     def __init__(self, etiqueta, password=False, parent=None):
         super().__init__(parent)
         self.setFixedHeight(50)
-        self.setFixedWidth(200)
         self._f = 0.0
         self.entrada = QLineEdit(self)
         if password:
@@ -862,8 +865,8 @@ class CampoFlotante(QWidget):
                 color: #3c3c3c;
                 border: 1px solid rgba(105, 105, 105, 100);
                 border-radius: 10px;
-                padding: 16px 5px 3px 10px;
-                font-size: 12px;
+                padding: 19px 5px 3px 10px;
+                font-size: 13px;
             }}
             QLineEdit:focus {{ border: 1px solid {Config.AZUL_FORM}; }}
         """)
@@ -913,7 +916,7 @@ class CampoFlotante(QWidget):
             f"color: rgba({c.red()},{c.green()},{c.blue()},{c.alpha()}); background: transparent;"
         )
         self._etiqueta.adjustSize()
-        self._etiqueta.move(11, int(8 * (1 - f) + 2 * f))
+        self._etiqueta.move(11, int(14 * (1 - f) + 3 * f))
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -926,31 +929,69 @@ class CampoFlotante(QWidget):
     def limpiar(self):
         self.entrada.clear()
 
-class TituloFormulario(QWidget):
+class TituloPulso(QWidget):
     def __init__(self, texto, icono=None, parent=None):
         super().__init__(parent)
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 8, 0, 8)
-        lay.setSpacing(10)
-        lay.addStretch()
+        self._texto = texto
+        self._p = 0.0
+        self._pixmap = None
 
         if icono:
-            etiqueta_icono = QLabel()
-            etiqueta_icono.setStyleSheet("background: transparent;")
-            qicono = icono if isinstance(icono, QIcon) else QIcon(str(icono))
-            etiqueta_icono.setPixmap(qicono.pixmap(28, 28))
-            lay.addWidget(etiqueta_icono)
+            pm = QPixmap(str(icono))
+            if not pm.isNull():
+                self._pixmap = pm.scaled(30, 30, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
-        self.titulo = QLabel(texto)
-        self.titulo.setFont(fuente(17, True, -1))
-        self.titulo.setStyleSheet(f"color: {Config.AZUL_FORM}; background: transparent;")
-        lay.addWidget(self.titulo)
-        lay.addStretch()
+        self.setFixedHeight(40 if self._pixmap else 36)
 
+        # La bolita animada solo se usa cuando no hay icono
+        self._anim = QPropertyAnimation(self, b"pulso", self)
+        self._anim.setDuration(1000)
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.setLoopCount(-1)
+        self._anim.setEasingCurve(QEasingCurve.Linear)
+        if self._pixmap is None:
+            self._anim.start()
+
+    def _get_p(self):
+        return self._p
+
+    def _set_p(self, v):
+        self._p = v
+        self.update()
+
+    pulso = Property(float, _get_p, _set_p)
+
+    def paintEvent(self, ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        h = self.height()
+        c = QColor(Config.AZUL_FORM)
+
+        if self._pixmap is not None:
+            p.drawPixmap(0, (h - self._pixmap.height()) // 2, self._pixmap)
+            x_texto = self._pixmap.width() + 10
+        else:
+            centro = QPointF(10, h / 2)
+            p.setPen(Qt.NoPen)
+            p.setBrush(c)
+            p.drawEllipse(centro, 9, 9)
+            onda = QColor(c)
+            onda.setAlphaF(1 - self._p)
+            p.setBrush(onda)
+            r = 9 * (0.9 + 0.9 * self._p)
+            p.drawEllipse(centro, r, r)
+            x_texto = 32
+
+        p.setFont(fuente(17, True, -1))
+        p.setPen(c)
+        p.drawText(QRectF(x_texto, 0, self.width() - x_texto, h), Qt.AlignVCenter | Qt.AlignLeft, self._texto)
+        
 class TarjetaFormulario(QFrame):
     enviado = Signal()
 
-    def __init__(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=450, parent=None, icono=None):
+    def __init__(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=350, parent=None, icono=None):
         super().__init__(parent)
         self.setObjectName("tarjetaFormulario")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -963,20 +1004,19 @@ class TarjetaFormulario(QFrame):
             }}
         """)
         self._lay = QVBoxLayout(self)
-        self._lay.setContentsMargins(36, 0, 36, 0)
+        self._lay.setContentsMargins(20, 20, 20, 20)
         self._lay.setSpacing(10)
         # Fila de logos: se inserta arriba la primera vez que se llama a agregar_logo()
         self.fila_logos = QHBoxLayout()
         self.fila_logos.setAlignment(Qt.AlignCenter)
-        self.fila_logos.setSpacing(100)
+        self.fila_logos.setSpacing(50)
         self._fila_logos_puesta = False
 
-        self._lay.addWidget(TituloFormulario(titulo, icono))
+        self._lay.addWidget(TituloPulso(titulo, icono))
         if mensaje:
             m = QLabel(mensaje)
             m.setWordWrap(True)
-            m.setStyleSheet("color: rgba(169,169,169,169); font-size: 14px; background: transparent; font-weight: bold;")
-            m.setAlignment(Qt.AlignCenter)
+            m.setStyleSheet("color: rgba(0,0,0,178); font-size: 14px; background: transparent; font-weight:bold;")
             self._lay.addWidget(m)
 
         self.campos = {}
@@ -1050,7 +1090,7 @@ class TarjetaFormulario(QFrame):
         """Agrega un campo flotante en el orden actual y lo devuelve."""
         campo = CampoFlotante(etiqueta, password)
         self.campos[etiqueta] = campo
-        self.agregar_widget(campo, Qt.AlignHCenter)
+        self.agregar_widget(campo)
         return campo
 
     def valores(self):
@@ -1059,6 +1099,7 @@ class TarjetaFormulario(QFrame):
     def limpiar(self):
         for c in self.campos.values():
             c.limpiar()
+
 # ======================================================================
 #  MENÚ PRINCIPAL: cabecera + tarjetas con opciones y subopciones
 # ======================================================================
@@ -1151,9 +1192,10 @@ class TarjetaMenu(QFrame):
     """
     seleccionado = Signal(str)
 
-    def __init__(self, titulo, items, icono=None, parent=None):
+    def __init__(self, titulo, items, icono=None, parent=None, iconos=None):
         super().__init__(parent)
         self._titulo = titulo
+        self._iconos = iconos or {}      # {"TÍTULO/Opción": "archivo.png"} (carpeta recursos)
         self.setObjectName("tarjetaMenu")
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(f"""
@@ -1194,22 +1236,41 @@ class TarjetaMenu(QFrame):
             self._agregar(item, 0, titulo)
         self._lay.addStretch()
 
+    def _poner_icono(self, boton, ruta):
+        nombre = self._iconos.get(ruta)
+        archivo = ruta_recurso(nombre) if nombre else None
+        if archivo:
+            boton.setIcon(QIcon(str(archivo)))
+            boton.setIconSize(QSize(18, 18))
+
     def _agregar(self, item, nivel, ruta):
         if isinstance(item, (tuple, list)) and len(item) == 2 and isinstance(item[1], (list, tuple)):
             grupo, hijos = item
-            etiqueta = _ItemMenu(grupo, nivel, self)                         
+            etiqueta = _ItemMenu(grupo, nivel, self)          # el grupo también se puede abrir
             etiqueta.setFont(fuente(10.5, True, 0.2))
-            etiqueta.setFixedHeight(32)
-            etiqueta.setStyleSheet(
-                f"color: {Config.AZUL_ENTRAR}; background: transparent; padding-left: {14 + nivel * 20}px;"
-            )
+            etiqueta.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {Config.AZUL_ENTRAR};
+                    border: none;
+                    border-radius: 8px;
+                    text-align: left;
+                    padding-left: {10 + nivel * 20}px;
+                }}
+                QPushButton:hover {{ background-color: rgba(0, 191, 255, 38); }}
+                QPushButton:pressed {{ background-color: rgba(0, 191, 255, 80); }}
+            """)
+            etiqueta.clicked.connect(lambda _=False, r=f"{ruta}/{grupo}": self.seleccionado.emit(r))
+            self._poner_icono(etiqueta, f"{ruta}/{grupo}")
             self._lay.addWidget(etiqueta)
             for hijo in hijos:
                 self._agregar(hijo, nivel + 1, f"{ruta}/{grupo}")
         else:
             boton = _ItemMenu(item, nivel, self)
             boton.clicked.connect(lambda _=False, r=f"{ruta}/{item}": self.seleccionado.emit(r))
+            self._poner_icono(boton, f"{ruta}/{item}")
             self._lay.addWidget(boton)
+
 
 class VentanaBase(QWidget):
 
@@ -1296,17 +1357,18 @@ class VentanaBase(QWidget):
         return tarjeta
 
     def crear_formulario(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=250, icono=None):
-        return TarjetaFormulario(titulo, mensaje, campos, texto_boton, pie, ancho, self, icono=icono)
-    
+        return TarjetaFormulario(titulo, mensaje, campos, texto_boton, pie, ancho, self, icono)
+
     def crear_cabecera_menu(self, titulo, icono=None, boton=None):
         """Fila superior del menú: icono + título a la izquierda y un botón (Salir) a la derecha."""
         return CabeceraMenu(titulo, icono, boton, self)
 
-    def crear_tarjeta_menu(self, titulo, items, icono=None):
-        """Tarjeta del menú principal con opciones y subopciones (ver TarjetaMenu)."""
-        return TarjetaMenu(titulo, items, icono, self)
+    def crear_tarjeta_menu(self, titulo, items, icono=None, iconos=None):
+        """Tarjeta del menú principal con opciones y subopciones (ver TarjetaMenu).
+        iconos: {"ALUMNOS/Consultas": "consultas.png", ...} icono por opción."""
+        return TarjetaMenu(titulo, items, icono, self, iconos)
 
-    #  campos y labels
+    #  campos y labels 
     def crear_campo_texto(self, placeholder="", password=False, alto=40):
         return CampoTexto(placeholder, password, alto)
 

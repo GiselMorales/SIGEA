@@ -1,5 +1,6 @@
-from logica import validaciones as v
-from logica import alumnos as la
+from Logica import validaciones as v
+from Logica import alumnos as la
+from Logica.validaciones import turno_por_puntaje, SEMESTRE_INICIAL
 from ventanas.base_alta import VentanaAlta
 
 class VentanaAltaAlumno(VentanaAlta):
@@ -120,6 +121,8 @@ class VentanaAltaAlumno(VentanaAlta):
             ("CURP", datos.get("curp")),
             ("Carrera", datos.get("carrera")),
             ("Correo personal", datos.get("correo")),
+            ("Turno", turno_por_puntaje(datos["puntaje_examen_admision"])),
+            ("Semestre", str(SEMESTRE_INICIAL)),
         ]
         aviso = (
             "Al registrar se crearán automáticamente:\n"

@@ -1,6 +1,7 @@
-
-from logica import validaciones as v
+from Logica import validaciones as v
+from Logica import inscripciones as li
 from ventanas.base_alta import VentanaAlta
+
 
 class VentanaAltaInscripcion(VentanaAlta):
     def __init__(self, menu=None):
@@ -41,17 +42,34 @@ class VentanaAltaInscripcion(VentanaAlta):
             ),
         )
 
-    def buscar_alumno(self, ficha):
-        return {}
-
     def _validar_alumno(self, datos):
-        errores, limpio = v.validar_numero(datos, "ficha", "Número de ficha / control", 6, 10)
+        # Acepta cualquier número (solo dígitos) y lo busca como control o como ficha.
+        errores, limpio = v.validar_numero(
+            datos, "ficha", "Número de ficha / control", min_len=1, max_len=20
+        )
         if errores:
             return errores, limpio
-        if self.buscar_alumno(limpio["ficha"]) is None:
-            return {"ficha": "No existe un alumno registrado con esa ficha."}, {}
+
+        alumno, problema = li.buscar_alumno(limpio["ficha"])
+        if problema:
+            return {"ficha": problema}, {}
+        if alumno is None:
+            return {"ficha": "No existe un alumno con ese número de ficha o de control."}, {}
+
+        limpio["numero_control"] = alumno["numero_control"]
+        limpio["alumno_nombre"] = alumno["nombre"]
         return {}, limpio
 
+    def resumen_confirmacion(self, datos):
+        lineas = [
+            ("Alumno", datos.get("alumno_nombre")),
+            ("Número de control", datos.get("numero_control")),
+            ("Trámite", datos.get("tipo_inscripcion")),
+            ("Periodo", datos.get("periodo")),
+            ("Semestre", datos.get("semestre")),
+            ("PDF adjuntos", str(len(datos.get("documentos") or []))),
+        ]
+        return lineas, ""
+
     def guardar(self, datos):
-        # TODO: guardar la inscripción en la base de datos (datos ya validados y normalizados).
-        return super().guardar(datos)
+        return li.registrar_tramite(datos)

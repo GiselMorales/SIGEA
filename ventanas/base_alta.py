@@ -1,14 +1,21 @@
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QScrollArea, QSizePolicy,
-    QGraphicsOpacityEffect, QFileDialog, QCompleter, QLineEdit, QComboBox, QPushButton, QMessageBox
+    QGraphicsOpacityEffect, QFileDialog, QCompleter, QLineEdit, QComboBox,
+    QPushButton, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer
 from ventanas.ventana import VentanaBase, Config, CampoFlotante
+from ventanas.componentes import (
+    opciones_barra, ESTILO_BOTON_SUBIR, ESTILO_BOTON_QUITAR, ESTILO_COMBO_TIPO,
+)
+from Logica.validaciones import TIPOS_DOCUMENTO, PDF_MAX_ARCHIVOS
 
 AZUL = "#1E508E"
 GRIS = "#5B6B79"
 _ANCHO_MAX_QT = 16777215
+SIN_ARCHIVOS = "Ningún archivo seleccionado."
+
 
 class _Seccion:
     def __init__(self, indice, tarjeta, claves, validador, error, estado):
@@ -22,17 +29,19 @@ class _Seccion:
         self.datos = {}
         self.actualizando = False      # evita que reescribir un campo cuente como cambio del usuario
 
+
 class VentanaAlta(VentanaBase):
     ANCHO_TARJETA = 790
-    #contiene la estructura de la ventana para dar de alta un registro (alumno, docente, inscripción, etc.)
+    # Estructura de la ventana para dar de alta un registro (alumno, docente, inscripción, etc.)
+
     def __init__(self, titulo_ventana, titulo, texto_registrar, menu=None, ancho=1080, alto=660):
         super().__init__(titulo_ventana, ancho, alto)
         self.menu = menu
         self._secciones = []
-        self._seccion_de = {}          # clave de campo - indice de sección
-        self._lectores = {}            # clave - (función que lee el valor, widget para enfocar)
+        self._seccion_de = {}          # clave de campo -> indice de sección
+        self._lectores = {}            # clave -> (función que lee el valor, widget para enfocar)
         self._claves_actuales = []
-        self._pdfs = {}                # clave - lista de rutas PDF elegidas
+        self._pdfs = {}                # clave -> lista de {"ruta", "tipo"}
         self._etiquetas_pdf = {}
         self._filas_pdf = {}
         self._layouts_pdf = {}
@@ -44,16 +53,18 @@ class VentanaAlta(VentanaBase):
 
     def construir_secciones(self):
         raise NotImplementedError
-    
+
     def guardar(self, datos):
         return True, (
             "Los datos son válidos.\n"
             "(Falta conectar la base de datos para guardarlos.)"
         )
 
-    #marco de la ventana, con barra lateral y scroll para el contenido
+    # ------------------------------------------------------------------
+    #  Marco de la ventana: barra lateral y scroll para el contenido
+    # ------------------------------------------------------------------
     def _armar_marco(self, titulo):
-        raiz = QVBoxLayout(self) 
+        raiz = QVBoxLayout(self)
         raiz.setContentsMargins(28, 22, 28, 24)
         raiz.setSpacing(16)
 
@@ -66,13 +77,7 @@ class VentanaAlta(VentanaBase):
         cuerpo = QHBoxLayout()
         cuerpo.setSpacing(18)
 
-        self._barra = self.crear_barra_vertical([
-            ("Menú principal", self.volver),
-            ("Alta", None),
-            ("Baja", None),
-            ("Modificar", None),
-            ("Consultar", None),
-        ])
+        self._barra = self.crear_barra_vertical(opciones_barra(self.volver))
         self._barra.seleccionado.connect(self._navegar)
         cuerpo.addWidget(self._barra, 0, Qt.AlignTop)
 
@@ -119,7 +124,6 @@ class VentanaAlta(VentanaBase):
             self.menu.show()
         super().closeEvent(evento)
 
-
     def _contenedor(self, nombre="fila"):
         c = QWidget()
         c.setObjectName(nombre)
@@ -130,6 +134,9 @@ class VentanaAlta(VentanaBase):
         self._lectores[clave] = (lector, widget)
         self._claves_actuales.append(clave)
 
+    # ------------------------------------------------------------------
+    #  Campos
+    # ------------------------------------------------------------------
     def campo(self, clave, etiqueta, sugerencias=None, password=False):
         """Campo flotante. 'sugerencias' agrega una lista desplegable al escribir."""
         c = CampoFlotante(etiqueta, password)
@@ -158,31 +165,24 @@ class VentanaAlta(VentanaBase):
         lay.addWidget(radio)
         return caja
 
-    
-    def zona_pdf(self, clave, texto_boton="Subir PDF"):
+    # ------------------------------------------------------------------
+    #  Zona de PDF
+    # ------------------------------------------------------------------
+    def zona_pdf(self, clave, texto_boton="Seleccionar PDF"):
         self._pdfs[clave] = []
         self._filas_pdf[clave] = []
 
-        lista = self.crear_label_subtitulo(
-            "Ningún archivo seleccionado.",
-            10,
-            Config.TEXTO_OSCURO,
-        )
+        lista = self.crear_label_subtitulo(SIN_ARCHIVOS, 10, Config.TEXTO_OSCURO)
         lista.setWordWrap(True)
         self._etiquetas_pdf[clave] = lista
 
-        boton = self.crear_boton_secundario(
-            texto_boton,
-            lambda: self._elegir_pdfs(clave),
-            ancho=150,
-            alto=42,
-        )
+        boton = QPushButton(texto_boton)
+        boton.setFixedSize(170, 40)
+        boton.setCursor(Qt.PointingHandCursor)
+        boton.setStyleSheet(ESTILO_BOTON_SUBIR)
+        boton.clicked.connect(lambda: self._elegir_pdfs(clave))
 
-        self._registrar_lector(
-            clave,
-            lambda: list(self._pdfs[clave]),
-            None,
-        )
+        self._registrar_lector(clave, lambda: list(self._pdfs[clave]), None)
 
         caja = self._contenedor("zonaPdf")
         lay = QVBoxLayout(caja)
@@ -200,34 +200,31 @@ class VentanaAlta(VentanaBase):
 
         self._layouts_pdf[clave] = layout_filas
         lay.addWidget(contenedor_filas)
-
         return caja
 
-
     def _crear_fila_pdf(self, clave, ruta):
-        """Crea una fila con el nombre, tipo y botón para quitar un PDF."""
+        """Fila con el nombre, el tipo de documento y el botón para quitar un PDF."""
         fila = self._contenedor("filaPdf")
         layout = QHBoxLayout(fila)
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(10)
 
         archivo = Path(ruta)
-        nombre = self.crear_label_subtitulo(
-            archivo.name, 10, Config.TEXTO_OSCURO
-        )
+        nombre = self.crear_label_subtitulo(archivo.name, 10, Config.TEXTO_OSCURO)
         nombre.setWordWrap(True)
 
         tipo = QComboBox()
         tipo.addItem("Selecciona el tipo", "")
-        tipo.addItem("Acta de nacimiento", "acta_nacimiento")
-        tipo.addItem("CURP", "curp")
-        tipo.addItem("Certificado de bachillerato", "certificado_bachillerato")
-        tipo.addItem("Comprobante de domicilio", "comprobante_domicilio")
-        tipo.addItem("Otro", "otro")
-        tipo.setMinimumWidth(210)
+        for valor, etiqueta in TIPOS_DOCUMENTO.items():
+            tipo.addItem(etiqueta, valor)
+        tipo.setFixedSize(240, 34)
+        tipo.setCursor(Qt.PointingHandCursor)
+        tipo.setStyleSheet(ESTILO_COMBO_TIPO)
 
         quitar = QPushButton("Quitar")
-        quitar.setFixedWidth(70)
+        quitar.setFixedSize(84, 34)
+        quitar.setCursor(Qt.PointingHandCursor)
+        quitar.setStyleSheet(ESTILO_BOTON_QUITAR)
 
         layout.addWidget(nombre, 1)
         layout.addWidget(tipo, 0)
@@ -235,43 +232,62 @@ class VentanaAlta(VentanaBase):
 
         fila.tipo_documento = tipo
         fila.ruta_pdf = str(archivo)
-        quitar.clicked.connect(
-            lambda: self._quitar_pdf(clave, fila)
-        )
-
+        quitar.clicked.connect(lambda: self._quitar_pdf(clave, fila))
         return fila
-
 
     def _quitar_pdf(self, clave, fila):
         if fila in self._filas_pdf.get(clave, []):
             self._filas_pdf[clave].remove(fila)
-
-        self._actualizar_pdfs(clave)
+        fila.setParent(None)
         fila.deleteLater()
-
+        self._actualizar_pdfs(clave)
 
     def _actualizar_pdfs(self, clave):
         """Actualiza los datos que recibe la validación de la sección."""
-        documentos = []
-
-        for fila in self._filas_pdf.get(clave, []):
-            documentos.append({
-                "ruta": fila.ruta_pdf,
-                "tipo": fila.tipo_documento.currentData(),
-            })
-
+        documentos = [
+            {"ruta": fila.ruta_pdf, "tipo": fila.tipo_documento.currentData()}
+            for fila in self._filas_pdf.get(clave, [])
+        ]
         self._pdfs[clave] = documentos
 
         if documentos:
-            texto = "\n".join(
-                f"• {Path(doc['ruta']).name}"
-                for doc in documentos
-            )
+            texto = f"{len(documentos)} archivo(s) seleccionado(s) (máximo {PDF_MAX_ARCHIVOS})."
         else:
-            texto = "Ningún archivo seleccionado."
-
+            texto = SIN_ARCHIVOS
         self._etiquetas_pdf[clave].setText(texto)
         self._cambio(clave)
+
+    def _elegir_pdfs(self, clave):
+        archivos, _ = QFileDialog.getOpenFileNames(
+            self, "Selecciona archivos PDF", "", "Documentos PDF (*.pdf)"
+        )
+        if not archivos:
+            return
+
+        rutas_actuales = {
+            str(Path(f.ruta_pdf).resolve()) for f in self._filas_pdf[clave]
+        }
+
+        for ruta in archivos:
+            ruta_normalizada = str(Path(ruta).resolve())
+            if ruta_normalizada in rutas_actuales:
+                continue
+
+            if len(self._filas_pdf[clave]) >= PDF_MAX_ARCHIVOS:
+                self.mostrar_advertencia(
+                    "SIGEA", f"Solo puedes subir un máximo de {PDF_MAX_ARCHIVOS} archivos PDF."
+                )
+                break
+
+            fila = self._crear_fila_pdf(clave, ruta)
+            self._filas_pdf[clave].append(fila)
+            self._layouts_pdf[clave].addWidget(fila)
+            fila.tipo_documento.currentIndexChanged.connect(
+                lambda _i, k=clave: self._actualizar_pdfs(k)
+            )
+            rutas_actuales.add(ruta_normalizada)
+
+        self._actualizar_pdfs(clave)
 
     def fila(self, *widgets, pesos=None):
         """Acomoda widgets en una fila. Un None deja un espacio vacío."""
@@ -288,10 +304,10 @@ class VentanaAlta(VentanaBase):
         return caja
 
     # ------------------------------------------------------------------
-    #  SECCIONES
+    #  Secciones
     # ------------------------------------------------------------------
     def agregar_seccion(self, titulo, filas, validador, texto_boton="Validar"):
-        """validador: función(datos) -> (errores, limpio)  (ver logica/validaciones.py)."""
+        """validador: función(datos) -> (errores, limpio)  (ver Logica/validaciones.py)."""
         indice = len(self._secciones)
         tarjeta = self.crear_formulario(titulo, "", texto_boton=None, ancho=self.ANCHO_TARJETA)
         for f in filas:
@@ -364,7 +380,6 @@ class VentanaAlta(VentanaBase):
                 texto = "" if valor is None else str(valor)
                 if widget.text() != texto:
                     widget.setText(texto)
-
         seccion.actualizando = False
 
         seccion.datos = limpio
@@ -398,38 +413,8 @@ class VentanaAlta(VentanaBase):
             self.boton_registrar.setEnabled(False)
 
     # ------------------------------------------------------------------
-    #  PDF
+    #  Confirmación antes de registrar
     # ------------------------------------------------------------------
-    
-    def _elegir_pdfs(self, clave):
-        archivos, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Selecciona archivos PDF", "", "Documentos PDF (*.pdf)", )
-
-        if not archivos:
-            return
-        rutas_actuales = {
-            str(Path(f.ruta_pdf).resolve())
-            for f in self._filas_pdf[clave]
-        }
-
-        for ruta in archivos:
-            ruta_normalizada = str(Path(ruta).resolve())
-
-            if ruta_normalizada in rutas_actuales:
-                continue
-
-            fila = self._crear_fila_pdf(clave, ruta)
-            self._filas_pdf[clave].append(fila)
-            self._layouts_pdf[clave].addWidget(fila)
-            fila.tipo_documento.currentIndexChanged.connect(
-                lambda _i, k=clave: self._actualizar_pdfs(k)
-            )
-
-            rutas_actuales.add(ruta_normalizada)
-
-        self._actualizar_pdfs(clave)
-    #  CONFIRMACIÓN ANTES DE REGISTRAR
     def resumen_confirmacion(self, datos):
         """
         A redefinir en cada alta. Devuelve (lineas, aviso):
@@ -456,7 +441,9 @@ class VentanaAlta(VentanaBase):
         caja.exec()
         return caja.clickedButton() is si
 
-    #  REGISTRAR / LIMPIAR
+    # ------------------------------------------------------------------
+    #  Registrar / limpiar
+    # ------------------------------------------------------------------
     def _registrar(self):
         if not all(s.validada for s in self._secciones):
             self.mostrar_advertencia("SIGEA", "Valida todas las secciones antes de registrar.")
@@ -474,17 +461,20 @@ class VentanaAlta(VentanaBase):
             self.mostrar_advertencia("SIGEA", mensaje)
 
     def limpiar(self):
-        for clave, (_, widget) in self._lectores.items():
+        for _clave, (_, widget) in self._lectores.items():
             if isinstance(widget, QLineEdit):
                 widget.clear()
             elif widget is not None and hasattr(widget, "seleccionar"):
                 widget.seleccionar(0)
+
         for clave in self._pdfs:
             for fila in self._filas_pdf.get(clave, []):
+                fila.setParent(None)
                 fila.deleteLater()
-                self._filas_pdf[clave] = []
-                self._pdfs[clave] = []
-                self._etiquetas_pdf[clave].setText("Ningún archivo seleccionado.")
+            self._filas_pdf[clave] = []
+            self._pdfs[clave] = []
+            self._etiquetas_pdf[clave].setText(SIN_ARCHIVOS)
+
         for s in self._secciones:
             s.validada = False
             s.datos = {}

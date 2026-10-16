@@ -19,6 +19,8 @@ ESTADOS = [
     "Tabasco", "Tamaulipas", "Tlaxcala", "Veracruz", "Yucatán", "Zacatecas",
 ]
 PAISES = ["México"]
+SEMESTRE_INICIAL = 1        # todo alumno de nuevo ingreso empieza en 1er semestre
+PUNTAJE_MATUTINO = 90       # puntaje de admisión mínimo para turno matutino
 PDF_MAX_MB = 5          # tamaño máximo por archivo
 PDF_MAX_ARCHIVOS = 5    # cuántos PDF se pueden subir como máximo
 
@@ -29,6 +31,10 @@ def sin_acentos(texto):
     return "".join(
         c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
     )
+
+def turno_por_puntaje(puntaje):
+    """Matutino si el puntaje del examen de admisión es >= 90; en otro caso, Vespertino."""
+    return "Matutino" if float(puntaje) >= PUNTAJE_MATUTINO else "Vespertino"
 
 def periodos_disponibles(hoy=None):
     hoy = hoy or date.today()
@@ -488,6 +494,8 @@ def validar_inscripcion(datos):
     limpio["semestre"] = sem
     if msg:
         errores["semestre"] = msg
+    elif tipo == "Inscripción" and sem != str(SEMESTRE_INICIAL):
+        errores["semestre"] = f"Semestre: una inscripción es de primer semestre ({SEMESTRE_INICIAL})."
 
     grupo = espacios(datos.get("grupo")).upper().replace(" ", "")
     limpio["grupo"] = grupo
@@ -579,3 +587,52 @@ def validar_documentos(datos, clave="documentos", minimo=1, maximo=PDF_MAX_ARCHI
         return {clave: f"{etiqueta}: " + " ".join(errores)}, {}
 
     return {}, {clave: limpios}
+def validar_inscripcion(datos):
+    errores, limpio = {}, {}
+
+    # Tipo de trámite
+    tipo = espacios(datos.get("tipo_inscripcion"))
+    limpio["tipo_inscripcion"] = tipo
+    if tipo not in TIPOS_INSCRIPCION:
+        errores["tipo_inscripcion"] = "Tipo de trámite: elige Inscripción o Reinscripción."
+
+    # Periodo (acepta "ago-dic 2026" o "AGO - DIC 2026")
+    periodo = re.sub(r"\s*-\s*", "-", espacios(datos.get("periodo")).upper())
+    limpio["periodo"] = periodo
+    if not periodo:
+        errores["periodo"] = "Periodo: es obligatorio."
+    elif periodo not in periodos_disponibles():
+        anio = date.today().year
+        errores["periodo"] = (
+            f"Periodo: elige uno de la lista (ej. AGO-DIC {anio} o ENE-JUN {anio + 1})."
+        )
+
+    # Carrera
+    msg, carrera = _opcion(datos.get("carrera"), "Carrera", CARRERAS)
+    limpio["carrera"] = carrera
+    if msg:
+        errores["carrera"] = msg
+
+    # Semestre según el tipo de trámite
+    msg, sem = _validar_semestre(datos.get("semestre"))
+    limpio["semestre"] = sem
+    if msg:
+        errores["semestre"] = msg
+    elif tipo == "Inscripción" and sem != str(SEMESTRE_INICIAL):
+        errores["semestre"] = (
+            f"Semestre: una inscripción es de primer semestre ({SEMESTRE_INICIAL})."
+        )
+    elif tipo == "Reinscripción" and int(sem) <= SEMESTRE_INICIAL:
+        errores["semestre"] = (
+            "Semestre: una reinscripción es de segundo semestre en adelante (2 a 12)."
+        )
+
+    # Grupo
+    grupo = espacios(datos.get("grupo")).upper().replace(" ", "")
+    limpio["grupo"] = grupo
+    if not grupo:
+        errores["grupo"] = "Grupo: es obligatorio."
+    elif not re.fullmatch(r"[A-Z0-9]{1,6}", grupo):
+        errores["grupo"] = "Grupo: de 1 a 6 letras o números (ej. 7A)."
+
+    return errores, limpio

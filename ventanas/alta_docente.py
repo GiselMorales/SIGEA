@@ -1,5 +1,5 @@
-from logica import validaciones as v
-from logica.docentes import registrar_docente 
+from Logica import validaciones as v
+from Logica.docentes import registrar_docente 
 from ventanas.base_alta import VentanaAlta
 
 
