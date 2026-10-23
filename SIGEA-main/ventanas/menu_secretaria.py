@@ -6,6 +6,10 @@ from ventanas.alta_alumno import VentanaAltaAlumno
 from ventanas.alta_docente import VentanaAltaDocente
 from ventanas.inscripcion import VentanaAltaInscripcion
 
+# IMPORTACIONES NECESARIAS PARA LA BASE DE DATOS Y EL PDF
+from reportes.generador_pdf import generar_pdf_oficial
+from conexiondb.db import obtener_conexion
+
 class VentanaMenuAdmin(VentanaBase):
     def __init__(self):
         super().__init__("SIGEA - Menú del administrador", 980, 600)
@@ -15,6 +19,7 @@ class VentanaMenuAdmin(VentanaBase):
             "ALUMNOS/Inscripciones/Alta de alumno": lambda: self._abrir(VentanaAltaAlumno),
             "ALUMNOS/Reinscripciones/Alta de alumno": lambda: self._abrir(VentanaAltaInscripcion),
             "DOCENTE/Alta de docente": lambda: self._abrir(VentanaAltaDocente),
+            "ESTADÍSTICAS/Generar archivo/PDF": self.generar_reporte_pdf,
         }
 
         self.crear_interfaz()
@@ -70,6 +75,52 @@ class VentanaMenuAdmin(VentanaBase):
             accion()
         else:
             self.mostrar_mensaje("SIGEA", f"Módulo en construcción:\n{ruta.replace('/', '  ›  ')}")
+
+    def generar_reporte_pdf(self):
+        """Método conectado a la BD que consulta un alumno real y genera su PDF oficial."""
+        conexion = obtener_conexion()
+        if conexion is None:
+            self.mostrar_mensaje("SIGEA - Error", "No fue posible conectar con la base de datos.")
+            return
+
+        try:
+            with conexion:
+                with conexion.cursor() as cursor:
+                    # Consultamos el último alumno registrado (o puedes cambiar el WHERE según necesites)
+                    cursor.execute(
+                        """
+                        SELECT nombres, apellido_paterno, apellido_materno, numero_control, correo_institucional
+                        FROM public.alumnos
+                        ORDER BY numero_control DESC
+                        LIMIT 1
+                        """
+                    )
+                    resultado = cursor.fetchone()
+
+                    if not resultado:
+                        self.mostrar_mensaje("SIGEA", "No hay alumnos registrados en la base de datos para generar el reporte.")
+                        return
+
+                    nombres, apellido_p, apellido_m, num_control, correo = resultado
+                    nombre_completo = f"{nombres} {apellido_p} {apellido_m or ''}".strip()
+
+                    # Empaquetamos los datos reales para el generador PDF
+                    datos_alumno = {
+                        "nombre": nombre_completo,
+                        "numero_control": str(num_control),
+                        "fecha": "Octubre de 2026"
+                    }
+
+                    ruta_salida = f"constancia_alumno_{num_control}.pdf"
+                    
+                    # Llamamos a tu archivo generador_pdf.py externo
+                    generar_pdf_oficial(datos_alumno, ruta_salida)
+                    self.mostrar_mensaje("SIGEA - Éxito", f"El PDF oficial se ha generado correctamente:\n{ruta_salida}")
+
+        except Exception as e:
+            self.mostrar_mensaje("SIGEA - Error", f"Ocurrió un error al generar el PDF:\n{str(e)}")
+        finally:
+            conexion.close()
 
     def _abrir(self, clase_ventana):
         self._modulo = clase_ventana(self)
