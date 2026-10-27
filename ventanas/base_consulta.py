@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QFrame, QLabel, QSizePolicy,
+    QVBoxLayout, QHBoxLayout, QFrame, QLabel, QScrollArea, QSizePolicy, QMessageBox,
 )
 from PySide6.QtCore import Qt
 
@@ -8,20 +8,26 @@ from ventanas.componentes import opciones_barra
 
 
 class VentanaConsulta(VentanaBase):
-    """Base de las ventanas de consulta. El resultado se entrega en PDF.
-    Cada módulo define OPCIONES_FILTRO y el método consultar()."""
+    """Base de las ventanas de consulta.
+    Cada módulo define OPCIONES_FILTRO y los métodos consultar() y generar_pdf()."""
 
     OPCIONES_FILTRO = ["Todos"]
     ANCHO_CONTENIDO = 806
-    TEXTO_BOTON = "Generar PDF"
+    TEXTO_BOTON = "Consultar"
+    MAX_TARJETAS = 200            # máximo de resultados dibujados en pantalla
 
     def __init__(self, titulo_ventana, titulo, menu=None, ancho=1080, alto=660):
         super().__init__(titulo_ventana, ancho, alto)
         self.menu = menu
+        self._total_resultados = 0
         self._armar(titulo)
         self.centrar_ventana()
 
+    # --- a redefinir en cada módulo -----------------------------------
     def consultar(self):
+        raise NotImplementedError
+
+    def generar_pdf(self):
         raise NotImplementedError
 
     # ------------------------------------------------------------------
@@ -47,14 +53,14 @@ class VentanaConsulta(VentanaBase):
         derecha = QVBoxLayout()
         derecha.setSpacing(14)
         derecha.addLayout(self._fila_totales())
-        derecha.addWidget(self._panel_central(), 1)
-        self.etiqueta_info = self.crear_label_campo("", color="rgba(255, 255, 255, 200)")
-        derecha.addWidget(self.etiqueta_info)
+        derecha.addLayout(self._fila_resultados())
+        derecha.addWidget(self._zona_resultados(), 1)
         derecha.addWidget(self._barra_consulta())
         cuerpo.addLayout(derecha, 1)
 
         raiz.addLayout(cuerpo, 1)
         self._barra.seleccionar(1)
+        self.mostrar_vacio("Elige cómo consultar, escribe el valor y presiona «Consultar».")
 
     def _navegar(self, indice, texto):
         if indice in (2, 3, 4):
@@ -83,36 +89,92 @@ class VentanaConsulta(VentanaBase):
         fila.addStretch()
         return fila
 
-    def _panel_central(self):
-        """Zona principal: ahora solo explica que el resultado sale en PDF."""
-        panel = QFrame()
-        panel.setObjectName("panelPdf")
-        panel.setAttribute(Qt.WA_StyledBackground, True)
-        panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        panel.setStyleSheet(
-            "#panelPdf { background-color: #FFFFFF; border-radius: 14px; }"
+    # --- resultados en pantalla ---------------------------------------
+    def _fila_resultados(self):
+        """Texto con el número de resultados + botón para generar el PDF."""
+        fila = QHBoxLayout()
+        self.etiqueta_info = self.crear_label_campo("", color="rgba(255, 255, 255, 200)")
+        self.etiqueta_info.setWordWrap(True)
+        fila.addWidget(self.etiqueta_info, 1)
+        self.boton_pdf = self.crear_boton_secundario(
+            "Generar PDF", self._pedir_pdf, ancho=170, alto=46
         )
-        lay = QVBoxLayout(panel)
-        lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(8)
+        fila.addWidget(self.boton_pdf, 0, Qt.AlignRight)
+        return fila
 
-        titulo = QLabel("Consulta en PDF")
-        titulo.setAlignment(Qt.AlignCenter)
-        titulo.setStyleSheet(
-            f"color: {Config.AZUL_ENTRAR}; font-size: 22px; font-weight: bold; background: transparent;"
-        )
-        texto = QLabel(
-            "Elige cómo consultar, escribe el valor a buscar\n"
-            f"y presiona «{self.TEXTO_BOTON}». El documento se abrirá automáticamente."
-        )
-        texto.setAlignment(Qt.AlignCenter)
-        texto.setStyleSheet(
-            f"color: {Config.TEXTO_OSCURO}; font-size: 13px; background: transparent;"
-        )
-        lay.addWidget(titulo)
-        lay.addWidget(texto)
-        return panel
+    def _zona_resultados(self):
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._scroll.setStyleSheet("""
+            QScrollArea { border: none; }
+            QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
+            QScrollBar::handle:vertical { background: rgba(255,255,255,90); border-radius: 5px; min-height: 30px; }
+            QScrollBar::handle:vertical:hover { background: rgba(255,255,255,150); }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+        """)
+        contenido = QFrame()
+        contenido.setStyleSheet("background: transparent;")
+        self._lista = QVBoxLayout(contenido)
+        self._lista.setContentsMargins(0, 0, 8, 0)
+        self._lista.setSpacing(10)
+        self._scroll.setWidget(contenido)
+        return self._scroll
 
+    def limpiar_resultados(self):
+        while self._lista.count():
+            item = self._lista.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+    def mostrar_vacio(self, texto):
+        self.limpiar_resultados()
+        etiqueta = QLabel(texto)
+        etiqueta.setAlignment(Qt.AlignCenter)
+        etiqueta.setWordWrap(True)
+        etiqueta.setStyleSheet(
+            "color: rgba(255, 255, 255, 200); font-size: 13px; background: transparent;"
+        )
+        self._lista.addStretch()
+        self._lista.addWidget(etiqueta)
+        self._lista.addStretch()
+
+    def agregar_resultado(self, widget):
+        self._lista.addWidget(widget)
+
+    def cerrar_resultados(self):
+        self._lista.addStretch()
+        self._scroll.verticalScrollBar().setValue(0)
+
+    # --- PDF ------------------------------------------------------------
+    def _pedir_pdf(self):
+        n = self._total_resultados
+        if n == 0:
+            self.mostrar_advertencia("SIGEA", "Primero haz una consulta que tenga resultados.")
+            return
+
+        if n == 1:
+            detalle = "Se creará una ficha individual, sin tabla."
+        else:
+            detalle = f"Se creará un listado en tabla con {n} registros."
+
+        caja = QMessageBox(self)
+        caja.setIcon(QMessageBox.Question)
+        caja.setWindowTitle("Generar PDF")
+        caja.setText("¿Deseas generar el PDF de esta consulta?")
+        caja.setInformativeText(detalle)
+        si = caja.addButton("Sí, generar", QMessageBox.AcceptRole)
+        caja.addButton("Cancelar", QMessageBox.RejectRole)
+        caja.exec()
+        if caja.clickedButton() is si:
+            self.generar_pdf()
+
+    # --- barra de búsqueda ---------------------------------------------
     def _barra_consulta(self):
         tarjeta = self.crear_tarjeta(self.ANCHO_CONTENIDO, 84, 18)
         lay = QHBoxLayout(tarjeta)
@@ -130,7 +192,7 @@ class VentanaConsulta(VentanaBase):
         self.campo_valor.entrada.returnPressed.connect(self.consultar)
         lay.addWidget(self.campo_valor, 1)
 
-        lay.addWidget(self.crear_boton(self.TEXTO_BOTON, self.consultar, ancho=180, alto=44))
+        lay.addWidget(self.crear_boton(self.TEXTO_BOTON, self.consultar, ancho=170, alto=44))
         return tarjeta
 
     def volver(self):

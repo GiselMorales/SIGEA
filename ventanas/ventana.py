@@ -1281,7 +1281,8 @@ class VentanaBase(QWidget):
     # ---------- ventana ----------
     def configurar_ventana(self, titulo, ancho, alto):
         self.setWindowTitle(titulo)
-        self.setFixedSize(ancho, alto)
+        self.resize(ancho, alto)
+        self.setMinimumSize(750, 550)
         icono = buscar_icono_app()
         if icono:
             self.setWindowIcon(QIcon(icono))

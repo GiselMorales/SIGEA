@@ -1,4 +1,5 @@
-
+"""Inscripciones y reinscripciones (tablas inscripciones, reinscripciones,
+periodos_escolares y documentos_pdf)."""
 import re
 import shutil
 from pathlib import Path
@@ -95,6 +96,24 @@ def _copiar_archivos(pendientes):
     return guardados, fallidos
 
 
+def _validar_horario(cursor, horario_id, semestre, turno):
+    """El horario debe existir, ser del semestre elegido y del turno del alumno."""
+    cursor.execute(
+        "SELECT semestre, turno FROM public.horarios_semestre "
+        "WHERE horario_semestre_id = %s",
+        (horario_id,),
+    )
+    fila = cursor.fetchone()
+    if fila is None:
+        raise ValueError("El horario seleccionado ya no existe.")
+    if fila[0] != semestre:
+        raise ValueError(f"Ese horario es del semestre {fila[0]}, no del {semestre}.")
+    if turno and fila[1] != turno:
+        raise ValueError(
+            f"El alumno es del turno {turno} y ese horario es {fila[1]}."
+        )
+
+
 # ----------------------------------------------------------------------
 #  Registro del trámite
 # ----------------------------------------------------------------------
@@ -103,6 +122,9 @@ def registrar_tramite(datos):
     tipo = datos["tipo_inscripcion"]
     numero_control = datos["numero_control"]
     semestre = int(datos["semestre"])
+    horario_id = datos.get("horario_id")
+    if not horario_id:
+        return False, "Selecciona el horario del semestre."
 
     conexion = obtener_conexion()
     if conexion is None:
@@ -155,14 +177,17 @@ def registrar_tramite(datos):
                     if not turno_asignado:
                         raise ValueError("El alumno no tiene turno asignado.")
 
+                    _validar_horario(cursor, horario_id, semestre, turno_asignado)
                     cursor.execute(
                         """
                         INSERT INTO public.inscripciones
                             (numero_control, periodo_ingreso_id,
-                             semestre_asignado, turno_asignado)
-                        VALUES (%s, %s, %s, %s)
+                             semestre_asignado, turno_asignado,
+                             horario_semestre_id)
+                        VALUES (%s, %s, %s, %s, %s)
                         """,
-                        (numero_control, periodo_id, semestre, turno_asignado),
+                        (numero_control, periodo_id, semestre, turno_asignado,
+                         horario_id),
                     )
                     cursor.execute(
                         """
@@ -186,13 +211,15 @@ def registrar_tramite(datos):
                             f"El alumno cursa el semestre {semestre_actual}; "
                             "no puede reinscribirse a uno menor."
                         )
+                    _validar_horario(cursor, horario_id, semestre, turno)
                     cursor.execute(
                         """
                         INSERT INTO public.reinscripciones
-                            (numero_control, periodo_id, semestre)
-                        VALUES (%s, %s, %s)
+                            (numero_control, periodo_id, semestre,
+                             horario_semestre_id)
+                        VALUES (%s, %s, %s, %s)
                         """,
-                        (numero_control, periodo_id, semestre),
+                        (numero_control, periodo_id, semestre, horario_id),
                     )
                     cursor.execute(
                         """
@@ -217,6 +244,7 @@ def registrar_tramite(datos):
             f"Periodo: {datos['periodo']}\n"
             f"Semestre: {semestre}\n"
             f"{detalle}"
+            f"Horario: {datos.get('horario_texto', '-')}\n"
             f"Documentos guardados: {len(guardados)}"
         )
         if fallidos:

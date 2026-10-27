@@ -10,6 +10,7 @@ from ventanas.alta_docente import VentanaAltaDocente
 from ventanas.inscripcion import VentanaAltaInscripcion
 from ventanas.consulta_alumnos import VentanaConsultaAlumnos
 from ventanas.grafica_alumnos import VentanaGrafica
+from ventanas.alta_secretaria import VentanaAltaSecretaria
 
 # Icono de cada opción: "RUTA DE LA OPCIÓN": "archivo.png" (dentro de la carpeta recursos).
 # Si un archivo no existe, se avisa en la consola y la opción se muestra sin icono.
@@ -57,6 +58,7 @@ class VentanaMenuAdmin(VentanaBase):
             "ESTADÍSTICAS/Generar gráfica/Total de alumnos": lambda: self._abrir(VentanaGrafica, vista="total"),
             "ESTADÍSTICAS/Generar gráfica/Alumnos hombres": lambda: self._abrir(VentanaGrafica, vista="hombres"),
             "ESTADÍSTICAS/Generar gráfica/Alumnas mujeres": lambda: self._abrir(VentanaGrafica, vista="mujeres"),
+            "SECRETARIA/Alta de secretaria": lambda: self._abrir(VentanaAltaSecretaria),
         }
 
         self.crear_interfaz()
@@ -112,6 +114,12 @@ class VentanaMenuAdmin(VentanaBase):
                 ruta_recurso("estadisticas.png"),
                 iconos=ICONOS_ESTADISTICAS,
             ),
+                        self.crear_tarjeta_menu(
+                "SECRETARIA",
+                ["Alta de secretaria", "Baja de secretaria", "Modificaciones", "Consultas"],
+                ruta_recurso("secretaria.png"),
+                iconos=ICONOS_DOCENTE,
+            )
         ]
         for tarjeta in tarjetas:
             tarjeta.seleccionado.connect(self.abrir_opcion)

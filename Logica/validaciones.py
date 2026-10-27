@@ -3,6 +3,12 @@ import unicodedata
 from datetime import date, datetime
 from pathlib import Path
 
+PUESTOS_SECRETARIA = [
+    "Secretaria",
+    "Secretaria de control escolar",
+    "Auxiliar administrativo",
+    "Jefa de control escolar",
+]
 CARRERAS = ["Ingeniería en Sistemas Computacionales"]
 TIPOS_SANGRE = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
 SEXOS = ["Mujer", "Hombre"]
@@ -61,11 +67,25 @@ def _nombre(valor, etiqueta, obligatorio=True):
     v = espacios(valor)
     if not v:
         return (f"{etiqueta}: es obligatorio." if obligatorio else None), ""
-    if not 2 <= len(v) <= 40:
-        return f"{etiqueta}: debe tener entre 2 y 40 caracteres.", v
+    if not 3 <= len(v) <= 40:
+        return f"{etiqueta}: debe tener entre 3 y 40 caracteres.", v
     if not RE_NOMBRE.match(v):
         return f"{etiqueta}: solo letras y espacios (sin números ni símbolos).", v
+
+    texto = v.lower()
+
+    for i in range (len(texto)-2):
+        a, b, c = texto[i:i +3]
+        if (
+            a.isalpha() and b.isalpha() and c.isalpha()
+            and ord(b) == ord(a) + 1 and ord(c) == ord(b) + 1
+        ):
+            return f"{etiqueta}: no uses secuencias de letras consecutivas.", v
+        if a==b and b==c:
+            return f"{etiqueta}: no uses la misma letra 3 veces seguidas.", v
+
     return None, v.upper()
+
 
 def _fecha(valor, etiqueta, edad_min, edad_max):
     """Acepta dd/mm/aaaa (también con - o .). Devuelve (mensaje, date | None, 'dd/mm/aaaa')."""
@@ -636,3 +656,5 @@ def validar_inscripcion(datos):
         errores["grupo"] = "Grupo: de 1 a 6 letras o números (ej. 7A)."
 
     return errores, limpio
+
+

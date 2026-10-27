@@ -1,4 +1,3 @@
-# reportes/generador_pdf.py
 import os
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
@@ -7,8 +6,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 def generar_pdf_oficial(datos_registro, ruta_salida):
+    Path(ruta_salida).parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
-        ruta_salida,
+        str(ruta_salida),
         pagesize=letter,
         rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40
     )
