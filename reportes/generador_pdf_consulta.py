@@ -13,7 +13,7 @@ AZUL_CLARO = colors.HexColor("#EDF3FD")
 
 
 def _archivo_recurso(nombre):
-    """Busca un archivo en la carpeta Recursos/recursos sin importar mayúsculas."""
+    """Busca un archivo en la carpeta Recursos"""
     raiz = Path(__file__).resolve().parent.parent
     for carpeta in raiz.iterdir():
         if carpeta.is_dir() and carpeta.name.lower() == "recursos":
@@ -24,7 +24,6 @@ def _archivo_recurso(nombre):
 
 
 def _texto(valor, defecto="N/D"):
-    """Escapa &, < y > para que reportlab no falle con nombres como 'PÉREZ & HIJOS'."""
     return escape(str(valor)) if valor not in (None, "") else defecto
 
 
@@ -51,58 +50,6 @@ def _membrete(styles, ancho_total):
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
     ]))
     return tabla
-
-
-def generar_pdf_oficial(datos_registro, ruta_salida):
-    Path(ruta_salida).parent.mkdir(parents=True, exist_ok=True)
-
-    doc = SimpleDocTemplate(
-        str(ruta_salida), pagesize=letter,
-        rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40,
-    )
-    styles = getSampleStyleSheet()
-    story = [_membrete(styles, 530), Spacer(1, 20)]
-
-    style_titulo = ParagraphStyle(
-        "TituloDoc", fontName="Helvetica-Bold", fontSize=13, alignment=1,
-        textColor=colors.HexColor("#1B396A"),
-    )
-    story.append(Paragraph("COMPROBANTE DE REGISTRO OFICIAL", style_titulo))
-    story.append(Spacer(1, 15))
-
-    style_cuerpo = ParagraphStyle("CuerpoDoc", fontName="Helvetica", fontSize=10, leading=16)
-
-    nombre = datos_registro.get("nombre") or datos_registro.get("descripcion")
-    clave = datos_registro.get("ficha") or datos_registro.get("numero_control")
-    fecha = datos_registro.get("fecha") or date.today().strftime("%d/%m/%Y")
-
-    cuerpo_texto = f"""
-    A quien corresponda:
-    <br/><br/>
-    Por medio de la presente se hace constar que se encuentra registrado en el sistema SIGEA el siguiente expediente:
-    <br/><br/>
-    <b>Nombre / Descripción:</b> {_texto(nombre)}<br/>
-    <b>Clave / Identificador:</b> {_texto(clave)}<br/>
-    <b>Fecha de Emisión:</b> {_texto(fecha)}<br/>
-    <br/><br/>
-    Este documento cuenta con validez oficial dentro de la plataforma y sus datos están respaldados en los servidores institucionales.
-    """
-    story.append(Paragraph(cuerpo_texto, style_cuerpo))
-    story.append(Spacer(1, 40))
-
-    tabla_firma = Table(
-        [["________________________________________"], ["Firma y Sello Autorizado"]],
-        colWidths=[250],
-    )
-    tabla_firma.setStyle(TableStyle([
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-    ]))
-    story.append(tabla_firma)
-
-    doc.build(story)
-    return ruta_salida
 
 
 def generar_pdf_consulta(titulo, columnas, filas, ruta_salida,

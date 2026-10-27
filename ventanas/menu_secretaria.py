@@ -1,15 +1,23 @@
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QMessageBox, QWidget
 from PySide6.QtCore import Qt
 
-import traceback
-
 from ventanas.ventana import VentanaBase, ruta_recurso
 from ventanas.componentes import InsigniaUsuario
 from ventanas.alta_alumno import VentanaAltaAlumno
 from ventanas.alta_docente import VentanaAltaDocente
-from ventanas.inscripcion import VentanaAltaInscripcion
+from ventanas.alta_secretaria import VentanaAltaSecretaria
+from ventanas.baja_secretaria import VentanaBajaSecretaria
+from ventanas.modificar_secretaria import VentanaModificarSecretaria
+from ventanas.consulta_secretarias import VentanaConsultaSecretarias
+from ventanas.consulta_horarios import VentanaConsultaHorarios
+from ventanas.inscripciones import VentanaAltaInscripcion
 from ventanas.consulta_alumnos import VentanaConsultaAlumnos
+from ventanas.baja_alumno import VentanaBajaAlumno
+from ventanas.modificar_alumno import VentanaModificarAlumno
+from ventanas.alta_horario import VentanaAltaHorario
+from ventanas.reportes import VentanaReporteHorarios, VentanaReporteListaGrupo
 from ventanas.grafica_alumnos import VentanaGrafica
+
 
 # Icono de cada opción: "RUTA DE LA OPCIÓN": "archivo.png" (dentro de la carpeta recursos).
 # Si un archivo no existe, se avisa en la consola y la opción se muestra sin icono.
@@ -31,13 +39,22 @@ ICONOS_DOCENTE = {
     "DOCENTE/Modificaciones": "modificar-icono.png",
     "DOCENTE/Consultas": "consulta-icono.png",
 }
+ICONOS_SECRETARIA = {
+    "SECRETARIA/Alta de secretaria": "altadocente-icono.png",
+    "SECRETARIA/Baja de secretaria": "bajadocente-icono.png",
+    "SECRETARIA/Modificación de secretaria": "modificar-icono.png",
+    "SECRETARIA/Consultas": "consulta-icono.png",
+    "SECRETARIA/Horarios": "archivo.png",
+    "SECRETARIA/Consultar horarios": "consulta-icono.png",
+}
 ICONOS_ESTADISTICAS = {
     "ESTADÍSTICAS/Generar gráfica": "grafica-icono.png",
     "ESTADÍSTICAS/Generar gráfica/Total de alumnos": "grafica-icono.png",
     "ESTADÍSTICAS/Generar gráfica/Alumnos hombres": "hombre.png",
     "ESTADÍSTICAS/Generar gráfica/Alumnas mujeres": "chica.png",
     "ESTADÍSTICAS/Generar archivo": "archivo.png",
-    "ESTADÍSTICAS/Generar archivo/PDF": "archivo-pdf.png",
+    "ESTADÍSTICAS/Generar archivo/Horarios": "archivo-pdf.png",
+    "ESTADÍSTICAS/Generar archivo/Lista de grupos": "archivo-pdf.png",
 }
 
 
@@ -49,14 +66,26 @@ class VentanaMenuAdmin(VentanaBase):
 
         self.acciones = {
             "ALUMNOS/Consultas": lambda: self._abrir(VentanaConsultaAlumnos),
-            "ALUMNOS/Inscripciones": lambda: self._abrir(VentanaAltaInscripcion),
             "ALUMNOS/Inscripciones/Alta de alumno": lambda: self._abrir(VentanaAltaAlumno),
-            "ALUMNOS/Reinscripciones/Alta de alumno": lambda: self._abrir(VentanaAltaInscripcion),
+            "ALUMNOS/Inscripciones/Baja de alumno": lambda: self._abrir(VentanaBajaAlumno),
+            "ALUMNOS/Inscripciones/Modificaciones": lambda: self._abrir(VentanaModificarAlumno),
+            "ALUMNOS/Inscripciones": lambda: self._abrir(VentanaAltaInscripcion),
+            "ALUMNOS/Reinscripciones": lambda: self._abrir(VentanaAltaInscripcion),
+            "ALUMNOS/Reinscripciones/Baja de alumno": lambda: self._abrir(VentanaBajaAlumno),
+            "ALUMNOS/Reinscripciones/Modificaciones": lambda: self._abrir(VentanaModificarAlumno),
             "DOCENTE/Alta de docente": lambda: self._abrir(VentanaAltaDocente),
+            "SECRETARIA/Alta de secretaria": lambda: self._abrir(VentanaAltaSecretaria),
+            "SECRETARIA/Baja de secretaria": lambda: self._abrir(VentanaBajaSecretaria),
+            "SECRETARIA/Modificación de secretaria": lambda: self._abrir(VentanaModificarSecretaria),
+            "SECRETARIA/Consultas": lambda: self._abrir(VentanaConsultaSecretarias),
+            "SECRETARIA/Horarios": lambda: self._abrir(VentanaAltaHorario),
+            "SECRETARIA/Consultar horarios": lambda: self._abrir(VentanaConsultaHorarios),
             "ESTADÍSTICAS/Generar gráfica": lambda: self._abrir(VentanaGrafica),
             "ESTADÍSTICAS/Generar gráfica/Total de alumnos": lambda: self._abrir(VentanaGrafica, vista="total"),
             "ESTADÍSTICAS/Generar gráfica/Alumnos hombres": lambda: self._abrir(VentanaGrafica, vista="hombres"),
             "ESTADÍSTICAS/Generar gráfica/Alumnas mujeres": lambda: self._abrir(VentanaGrafica, vista="mujeres"),
+            "ESTADÍSTICAS/Generar archivo/Horarios": lambda: self._abrir(VentanaReporteHorarios),
+            "ESTADÍSTICAS/Generar archivo/Lista de grupos": lambda: self._abrir(VentanaReporteListaGrupo),
         }
 
         self.crear_interfaz()
@@ -104,10 +133,23 @@ class VentanaMenuAdmin(VentanaBase):
                 iconos=ICONOS_DOCENTE,
             ),
             self.crear_tarjeta_menu(
+                "SECRETARIA",
+                [
+                    "Alta de secretaria",
+                    "Baja de secretaria",
+                    "Modificación de secretaria",
+                    "Consultas",
+                    "Horarios",
+                    "Consultar horarios",
+                ],
+                ruta_recurso("docente.png"),
+                iconos=ICONOS_SECRETARIA,
+            ),
+            self.crear_tarjeta_menu(
                 "ESTADÍSTICAS",
                 [
                     ("Generar gráfica", ["Total de alumnos", "Alumnos hombres", "Alumnas mujeres"]),
-                    ("Generar archivo", ["PDF"]),
+                    ("Generar archivo", ["Horarios", "Lista de grupos"]),
                 ],
                 ruta_recurso("estadisticas.png"),
                 iconos=ICONOS_ESTADISTICAS,
@@ -121,6 +163,7 @@ class VentanaMenuAdmin(VentanaBase):
 
     # ------------------------------------------------------------------
     def abrir_opcion(self, ruta):
+        """ruta llega como 'ALUMNOS/Inscripciones/Alta de alumno'."""
         accion = self.acciones.get(ruta)
         if accion:
             accion()
@@ -128,12 +171,7 @@ class VentanaMenuAdmin(VentanaBase):
             self.mostrar_mensaje("SIGEA", f"Módulo en construcción:\n{ruta.replace('/', '  ›  ')}")
 
     def _abrir(self, clase_ventana, **opciones):
-        try:
-            modulo = clase_ventana(self, **opciones)
-        except Exception as e:
-            traceback.print_exc()
-            self.mostrar_mensaje("Error al abrir módulo", str(e))
-            return
+        """Abre un módulo y esconde el menú; al cerrar el módulo, el menú vuelve a aparecer."""
         self._modulo = clase_ventana(self, **opciones)
         self.hide()
         self._modulo.show()

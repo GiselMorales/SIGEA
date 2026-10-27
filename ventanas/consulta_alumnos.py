@@ -1,27 +1,39 @@
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtWidgets import QMessageBox
-from PySide6.QtCore import QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QMessageBox, QFrame, QLabel, QHBoxLayout, QVBoxLayout
+from PySide6.QtCore import QUrl, Qt
+from PySide6.QtGui import QDesktopServices, QColor
 
 from conexiondb.db import obtener_conexion
-from reportes.generador_pdf_consulta import generar_pdf_consulta
+from reportes.generador_pdf import generar_pdf_oficial, generar_pdf_consulta
 from ventanas.base_consulta import VentanaConsulta
+from ventanas.ventana import Config
 
 # Los PDF se guardan en <proyecto>/reportes_generados
 CARPETA_SALIDA = Path(__file__).resolve().parent.parent / "reportes_generados"
 
+COLOR_ESTATUS = {
+    "Activo": "#2E7D32",
+    "Aspirante": Config.AZUL_ENTRAR,
+    "Baja": "#C0392B",
+    "Egresado": "#6A1B9A",
+}
+
 
 class VentanaConsultaAlumnos(VentanaConsulta):
-    COLUMNAS = ["No.", "No. control", "Nombre completo", "Carrera", "CURP", "Turno", "Sem.", "Estatus"]
+    COLUMNAS_PDF = ["No.", "No. control", "Nombre completo", "Carrera", "CURP", "Turno", "Sem.", "Estatus"]
     ANCHOS_PDF = [35, 75, 250, 50, 130, 70, 40, 70]
     OPCIONES_FILTRO = ["Todos", "No. control", "Nombre", "CURP"]
 
     def __init__(self, menu=None):
         super().__init__("SIGEA - Consultas de alumnos", "CONSULTAS", menu)
-        self.etiqueta_info.setText("Elige un filtro y presiona «Generar PDF».")
+        self._alumnos = []
+        self._filtro_texto = "Todos los alumnos"
 
+    # ------------------------------------------------------------------
+    #  Consulta
+    # ------------------------------------------------------------------
     def consultar(self):
         conexion = obtener_conexion()
 
@@ -56,6 +68,7 @@ class VentanaConsultaAlumnos(VentanaConsulta):
                         a.apellido_paterno,
                         a.apellido_materno,
                         c.clave,
+                        c.nombre,
                         a.curp,
                         a.sexo,
                         a.estado_alumno,
@@ -69,53 +82,153 @@ class VentanaConsultaAlumnos(VentanaConsulta):
                 """, parametros)
                 filas = cursor.fetchall()
 
-            mujeres = sum(f[6] == "Mujer" for f in filas)
-            hombres = sum(f[6] == "Hombre" for f in filas)
-            carreras = len({f[4] for f in filas})
+            alumnos = []
+            for (control, nombres, paterno, materno, clave, carrera, curp,
+                 sexo, estatus, turno, semestre) in filas:
+                alumnos.append({
+                    "control": control,
+                    "nombre": " ".join(p for p in (nombres, paterno, materno) if p),
+                    "clave_carrera": clave,
+                    "carrera": carrera,
+                    "curp": (curp or "").strip(),
+                    "sexo": sexo,
+                    "estatus": (estatus or "").capitalize(),
+                    "turno": (turno or "").capitalize(),
+                    "semestre": semestre,
+                })
 
-            self._numeros["total"].setText(str(len(filas)))
-            self._numeros["mujeres"].setText(str(mujeres))
-            self._numeros["hombres"].setText(str(hombres))
-            self._numeros["carreras"].setText(str(carreras))
-
-            if not filas:
-                self.etiqueta_info.setText("No se encontraron registros con esa búsqueda.")
-                return
-
-            filas_pdf = []
-            for i, (control, nombres, paterno, materno, carrera, curp,
-                    _sexo, estatus, turno, semestre) in enumerate(filas, start=1):
-                filas_pdf.append([
-                    str(i).zfill(2),
-                    control,
-                    " ".join(p for p in (nombres, paterno, materno) if p),
-                    carrera,
-                    (curp or "").strip(),
-                    (turno or "").capitalize(),
-                    semestre,
-                    (estatus or "").capitalize(),
-                ])
-
-            filtro = f"{campo}: {valor}" if valor and campo != "Todos" else (
-                f"«{valor}»" if valor else "Todos los alumnos"
+            self._alumnos = alumnos
+            self._total_resultados = len(alumnos)
+            self._filtro_texto = (
+                f"{campo}: {valor}" if valor and campo != "Todos"
+                else (f"«{valor}»" if valor else "Todos los alumnos")
             )
-            ruta = CARPETA_SALIDA / f"consulta_alumnos_{datetime.now():%Y%m%d_%H%M%S}.pdf"
-            generar_pdf_consulta(
-                "CONSULTA DE ALUMNOS",
-                self.COLUMNAS,
-                filas_pdf,
-                ruta,
-                anchos=self.ANCHOS_PDF,
-                filtro=filtro,
-                resumen=f"Total: {len(filas)}   Mujeres: {mujeres}   Hombres: {hombres}",
-            )
-
-            self.etiqueta_info.setText(f"{len(filas)} registro(s). PDF generado: {ruta.name}")
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(ruta)))
+            self._mostrar(alumnos)
 
         except Exception as error:
             print(f"Error al consultar alumnos: {error}")
-            QMessageBox.warning(self, "Error", "No fue posible generar el PDF de la consulta.")
+            QMessageBox.warning(self, "Error", "No fue posible consultar los alumnos.")
 
         finally:
             conexion.close()
+
+    def _mostrar(self, alumnos):
+        total = len(alumnos)
+        self._numeros["total"].setText(str(total))
+        self._numeros["mujeres"].setText(str(sum(a["sexo"] == "Mujer" for a in alumnos)))
+        self._numeros["hombres"].setText(str(sum(a["sexo"] == "Hombre" for a in alumnos)))
+        self._numeros["carreras"].setText(str(len({a["clave_carrera"] for a in alumnos})))
+
+        if not alumnos:
+            self.mostrar_vacio("No se encontraron alumnos con esa búsqueda.")
+            self.etiqueta_info.setText("")
+            return
+
+        self.limpiar_resultados()
+        for alumno in alumnos[:self.MAX_TARJETAS]:
+            self.agregar_resultado(self._tarjeta_alumno(alumno))
+        self.cerrar_resultados()
+
+        if total > self.MAX_TARJETAS:
+            self.etiqueta_info.setText(
+                f"{total} registro(s). Se muestran los primeros {self.MAX_TARJETAS}; "
+                "el PDF incluye todos."
+            )
+        else:
+            self.etiqueta_info.setText(f"{total} registro(s) encontrado(s)")
+
+    def _tarjeta_alumno(self, a):
+        tarjeta = QFrame()
+        tarjeta.setObjectName("resultado")
+        tarjeta.setAttribute(Qt.WA_StyledBackground, True)
+        tarjeta.setFixedHeight(80)
+        tarjeta.setStyleSheet(
+            "#resultado { background-color: #FFFFFF; border-radius: 12px; }"
+        )
+
+        lay = QHBoxLayout(tarjeta)
+        lay.setContentsMargins(16, 10, 16, 10)
+        lay.setSpacing(12)
+
+        textos = QVBoxLayout()
+        textos.setSpacing(2)
+
+        nombre = QLabel(a["nombre"])
+        nombre.setStyleSheet(
+            f"color: {Config.TEXTO_OSCURO}; font-size: 13px; font-weight: bold; "
+            "background: transparent;"
+        )
+        linea1 = QLabel(f"No. control: {a['control']}   •   CURP: {a['curp'] or '-'}")
+        linea2 = QLabel(
+            f"{a['carrera']}   •   Semestre {a['semestre'] or '-'}   •   "
+            f"Turno {a['turno'] or '-'}"
+        )
+        for etiqueta in (linea1, linea2):
+            etiqueta.setStyleSheet(
+                f"color: {Config.TEXTO_SUBTITULO}; font-size: 11px; background: transparent;"
+            )
+        textos.addWidget(nombre)
+        textos.addWidget(linea1)
+        textos.addWidget(linea2)
+        lay.addLayout(textos, 1)
+
+        color = QColor(COLOR_ESTATUS.get(a["estatus"], Config.TEXTO_SUBTITULO))
+        chip = QLabel(a["estatus"] or "-")
+        chip.setAlignment(Qt.AlignCenter)
+        chip.setStyleSheet(
+            f"color: {color.name()}; font-size: 11px; font-weight: bold; "
+            f"background-color: rgba({color.red()}, {color.green()}, {color.blue()}, 38); "
+            "border-radius: 10px; padding: 4px 14px;"
+        )
+        lay.addWidget(chip, 0, Qt.AlignVCenter)
+        return tarjeta
+
+    # ------------------------------------------------------------------
+    #  PDF: ficha sin tabla si hay 1 alumno; listado con tabla si hay varios
+    # ------------------------------------------------------------------
+    def generar_pdf(self):
+        alumnos = self._alumnos
+        if not alumnos:
+            self.mostrar_advertencia("SIGEA", "Primero haz una consulta que tenga resultados.")
+            return
+
+        marca = f"{datetime.now():%Y%m%d_%H%M%S}"
+        try:
+            if len(alumnos) == 1:
+                a = alumnos[0]
+                ruta = CARPETA_SALIDA / f"alumno_{a['control']}_{marca}.pdf"
+                generar_pdf_oficial(
+                    {
+                        "nombre": a["nombre"],
+                        "numero_control": a["control"],
+                        "fecha": datetime.now().strftime("%d/%m/%Y"),
+                    },
+                    str(ruta),
+                )
+            else:
+                filas_pdf = [
+                    [
+                        str(i).zfill(2), a["control"], a["nombre"], a["clave_carrera"],
+                        a["curp"], a["turno"], a["semestre"], a["estatus"],
+                    ]
+                    for i, a in enumerate(alumnos, start=1)
+                ]
+                mujeres = sum(a["sexo"] == "Mujer" for a in alumnos)
+                hombres = sum(a["sexo"] == "Hombre" for a in alumnos)
+                ruta = CARPETA_SALIDA / f"consulta_alumnos_{marca}.pdf"
+                generar_pdf_consulta(
+                    "CONSULTA DE ALUMNOS",
+                    self.COLUMNAS_PDF,
+                    filas_pdf,
+                    str(ruta),
+                    anchos=self.ANCHOS_PDF,
+                    filtro=self._filtro_texto,
+                    resumen=f"Total: {len(alumnos)}   Mujeres: {mujeres}   Hombres: {hombres}",
+                )
+
+            self.etiqueta_info.setText(f"PDF generado: {ruta.name}")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(ruta)))
+
+        except Exception as error:
+            print(f"Error al generar el PDF: {error}")
+            QMessageBox.warning(self, "Error", "No fue posible generar el PDF.")

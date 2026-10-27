@@ -45,7 +45,7 @@ class Config:
     AZUL_OSCURO = "#0F172A"
     AZUL_MEDIO = "#1D4ED8"
     AZUL_CLARO = "#38BDF8"
-    CIAN = "#00D4E0"
+    CIAN = "#7AC5FE"
 
     FONDO_VENTANA = "#15477D"
     FONDO_TARJETA = "#FFFFFF"
@@ -1281,7 +1281,8 @@ class VentanaBase(QWidget):
     # ---------- ventana ----------
     def configurar_ventana(self, titulo, ancho, alto):
         self.setWindowTitle(titulo)
-        self.setFixedSize(ancho, alto)
+        self.resize(ancho, alto)
+        self.setMinimumSize(750, 550)
         icono = buscar_icono_app()
         if icono:
             self.setWindowIcon(QIcon(icono))
