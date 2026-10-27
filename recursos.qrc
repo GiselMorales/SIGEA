@@ -1,0 +1,12 @@
+<RCC>
+  <qresource prefix="recursos">
+    <file>Recursos/Logotecnm.png</file>
+    <file>Recursos/logo-ita300.png</file>
+    <file>Recursos/inicio_sesion.png</file>
+    <file>Recursos/alumnos-icono.png</file>
+    <file>Recursos/docentes-icono.png</file>
+    <file>Recursos/estadisticas-icono.png</file>
+    <file>Recursos/inscripciones-icono.jpg</file>
+    <file>Recursos/reinscripcion-icono.jpg</file>
+  </qresource>
+</RCC>
