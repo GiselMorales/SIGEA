@@ -3,6 +3,12 @@ import unicodedata
 from datetime import date, datetime
 from pathlib import Path
 
+PUESTOS_SECRETARIA = [
+    "Secretaria",
+    "Secretaria de control escolar",
+    "Auxiliar administrativo",
+    "Jefa de control escolar",
+]
 CARRERAS = ["Ingeniería en Sistemas Computacionales"]
 TIPOS_SANGRE = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
 SEXOS = ["Mujer", "Hombre"]
@@ -19,6 +25,8 @@ ESTADOS = [
     "Tabasco", "Tamaulipas", "Tlaxcala", "Veracruz", "Yucatán", "Zacatecas",
 ]
 PAISES = ["México"]
+SEMESTRE_INICIAL = 1        # todo alumno de nuevo ingreso empieza en 1er semestre
+PUNTAJE_MATUTINO = 90       # puntaje de admisión mínimo para turno matutino
 PDF_MAX_MB = 5          # tamaño máximo por archivo
 PDF_MAX_ARCHIVOS = 5    # cuántos PDF se pueden subir como máximo
 
@@ -29,6 +37,10 @@ def sin_acentos(texto):
     return "".join(
         c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
     )
+
+def turno_por_puntaje(puntaje):
+    """Matutino si el puntaje del examen de admisión es >= 90; en otro caso, Vespertino."""
+    return "Matutino" if float(puntaje) >= PUNTAJE_MATUTINO else "Vespertino"
 
 def periodos_disponibles(hoy=None):
     hoy = hoy or date.today()
@@ -55,11 +67,25 @@ def _nombre(valor, etiqueta, obligatorio=True):
     v = espacios(valor)
     if not v:
         return (f"{etiqueta}: es obligatorio." if obligatorio else None), ""
-    if not 2 <= len(v) <= 40:
-        return f"{etiqueta}: debe tener entre 2 y 40 caracteres.", v
+    if not 3 <= len(v) <= 40:
+        return f"{etiqueta}: debe tener entre 3 y 40 caracteres.", v
     if not RE_NOMBRE.match(v):
         return f"{etiqueta}: solo letras y espacios (sin números ni símbolos).", v
+
+    texto = v.lower()
+
+    for i in range (len(texto)-2):
+        a, b, c = texto[i:i +3]
+        if (
+            a.isalpha() and b.isalpha() and c.isalpha()
+            and ord(b) == ord(a) + 1 and ord(c) == ord(b) + 1
+        ):
+            return f"{etiqueta}: no uses secuencias de letras consecutivas.", v
+        if a==b and b==c:
+            return f"{etiqueta}: no uses la misma letra 3 veces seguidas.", v
+
     return None, v.upper()
+
 
 def _fecha(valor, etiqueta, edad_min, edad_max):
     """Acepta dd/mm/aaaa (también con - o .). Devuelve (mensaje, date | None, 'dd/mm/aaaa')."""
@@ -488,6 +514,8 @@ def validar_inscripcion(datos):
     limpio["semestre"] = sem
     if msg:
         errores["semestre"] = msg
+    elif tipo == "Inscripción" and sem != str(SEMESTRE_INICIAL):
+        errores["semestre"] = f"Semestre: una inscripción es de primer semestre ({SEMESTRE_INICIAL})."
 
     grupo = espacios(datos.get("grupo")).upper().replace(" ", "")
     limpio["grupo"] = grupo
@@ -579,3 +607,54 @@ def validar_documentos(datos, clave="documentos", minimo=1, maximo=PDF_MAX_ARCHI
         return {clave: f"{etiqueta}: " + " ".join(errores)}, {}
 
     return {}, {clave: limpios}
+def validar_inscripcion(datos):
+    errores, limpio = {}, {}
+
+    # Tipo de trámite
+    tipo = espacios(datos.get("tipo_inscripcion"))
+    limpio["tipo_inscripcion"] = tipo
+    if tipo not in TIPOS_INSCRIPCION:
+        errores["tipo_inscripcion"] = "Tipo de trámite: elige Inscripción o Reinscripción."
+
+    # Periodo (acepta "ago-dic 2026" o "AGO - DIC 2026")
+    periodo = re.sub(r"\s*-\s*", "-", espacios(datos.get("periodo")).upper())
+    limpio["periodo"] = periodo
+    if not periodo:
+        errores["periodo"] = "Periodo: es obligatorio."
+    elif periodo not in periodos_disponibles():
+        anio = date.today().year
+        errores["periodo"] = (
+            f"Periodo: elige uno de la lista (ej. AGO-DIC {anio} o ENE-JUN {anio + 1})."
+        )
+
+    # Carrera
+    msg, carrera = _opcion(datos.get("carrera"), "Carrera", CARRERAS)
+    limpio["carrera"] = carrera
+    if msg:
+        errores["carrera"] = msg
+
+    # Semestre según el tipo de trámite
+    msg, sem = _validar_semestre(datos.get("semestre"))
+    limpio["semestre"] = sem
+    if msg:
+        errores["semestre"] = msg
+    elif tipo == "Inscripción" and sem != str(SEMESTRE_INICIAL):
+        errores["semestre"] = (
+            f"Semestre: una inscripción es de primer semestre ({SEMESTRE_INICIAL})."
+        )
+    elif tipo == "Reinscripción" and int(sem) <= SEMESTRE_INICIAL:
+        errores["semestre"] = (
+            "Semestre: una reinscripción es de segundo semestre en adelante (2 a 12)."
+        )
+
+    # Grupo
+    grupo = espacios(datos.get("grupo")).upper().replace(" ", "")
+    limpio["grupo"] = grupo
+    if not grupo:
+        errores["grupo"] = "Grupo: es obligatorio."
+    elif not re.fullmatch(r"[A-Z0-9]{1,6}", grupo):
+        errores["grupo"] = "Grupo: de 1 a 6 letras o números (ej. 7A)."
+
+    return errores, limpio
+
+

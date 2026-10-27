@@ -2,6 +2,7 @@ from pathlib import Path
 import psycopg
 from psycopg import errors
 from conexiondb.db import obtener_conexion
+from Logica.validaciones import turno_por_puntaje, SEMESTRE_INICIAL
 
 CARRERA_CLAVE = "ISC"
 def registrar_alumno(datos):
@@ -12,6 +13,9 @@ def registrar_alumno(datos):
     try:
         with conexion:
             with conexion.cursor() as cursor:
+                # turno según el puntaje del examen de admisión
+                turno = turno_por_puntaje(datos["puntaje_examen_admision"])
+
                 # id de carrera
                 cursor.execute(
                     """
@@ -58,12 +62,15 @@ def registrar_alumno(datos):
                         puntaje_examen_admision,
                         contacto_emergencia_nombre,
                         contacto_emergencia_parentesco,
-                        contacto_emergencia_telefono
+                        contacto_emergencia_telefono,
+                        turno,
+                        semestre_actual
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s
                     )
                     RETURNING numero_control
                     """,
@@ -94,6 +101,8 @@ def registrar_alumno(datos):
                         datos["contacto_emergencia_nombre"],
                         datos["contacto_emergencia_parentesco"],
                         datos["contacto_emergencia_telefono"],
+                        turno.lower(),          # la base guarda "matutino" / "vespertino"
+                        SEMESTRE_INICIAL,
                     ),
                 )
 
@@ -116,7 +125,9 @@ def registrar_alumno(datos):
         return True, (
             "Alumno registrado correctamente.\n\n"
             f"Número de control: {numero_control}\n"
-            f"Correo institucional: {correo_institucional}"
+            f"Correo institucional: {correo_institucional}\n"
+            f"Turno asignado: {turno}\n"
+            f"Semestre actual: {SEMESTRE_INICIAL}"
         )
 
     except errors.UniqueViolation as error:
@@ -167,7 +178,7 @@ def realizar_baja_logica(numero_control):
                 cursor.execute(
                     """
                     UPDATE public.alumnos
-                    SET estado = 'baja'
+                    SET estado_alumno = 'baja'
                     WHERE numero_control = %s
                     """,
                     (numero_control,),
