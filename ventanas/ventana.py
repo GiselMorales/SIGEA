@@ -45,7 +45,7 @@ class Config:
     AZUL_OSCURO = "#0F172A"
     AZUL_MEDIO = "#1D4ED8"
     AZUL_CLARO = "#38BDF8"
-    CIAN = "#00D4E0"
+    CIAN = "#7AC5FE"
 
     FONDO_VENTANA = "#15477D"
     FONDO_TARJETA = "#FFFFFF"

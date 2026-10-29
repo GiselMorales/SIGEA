@@ -1,9 +1,12 @@
 from Logica import validaciones as v
-from Logica.secretaria import registrar_secretaria 
+from Logica.secretaria import registrar_secretaria
 from ventanas.base_alta import VentanaAlta
+from ventanas.componentes import destinos_barra_secretaria
 
 
 class VentanaAltaSecretaria(VentanaAlta):
+    INDICE_BARRA = 1
+    DESTINOS_BARRA = destinos_barra_secretaria()
 
     def __init__(self, menu=None):
         super().__init__("SIGEA - Alta de secretaria", "ALTA DE SECRETARIA", "REGISTRAR SECRETARIA", menu)
@@ -38,12 +41,16 @@ class VentanaAltaSecretaria(VentanaAlta):
             [
                 self.fila(
                     self.selector("grado_academico", "Grado académico", v.GRADOS),
+                    None,
+                    pesos=(3, 3),
+                ),
+                self.fila(
                     self.selector("puesto", "Puesto", v.PUESTOS_SECRETARIA),
-                pesos=(3, 3),
+                    None,
+                    pesos=(3, 3),
                 ),
             ],
             self._validar_grado,
-            
         )
 
 

@@ -1,3 +1,7 @@
+"""Piezas de interfaz reutilizables: insignia de usuario, barra lateral
+con iconos y estilos de los botones de la zona de PDF."""
+import importlib
+
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel
 from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QColor, QPainter, QPixmap
@@ -57,6 +61,45 @@ ICONOS_BARRA = {
     "Modificar": "modificar-icono.png",
     "Consultar": "consulta-icono.png",
 }
+
+
+ORDEN_BARRA = ("Alta", "Baja", "Modificar", "Consultar")
+
+# Ventana a la que lleva cada opción de la barra lateral ("módulo:Clase").
+DESTINOS_ALUMNOS = {
+    "Alta": "ventanas.alta_alumno:VentanaAltaAlumno",
+    "Baja": "ventanas.baja_alumno:VentanaBajaAlumno",
+    "Modificar": "ventanas.modificar_alumno:VentanaModificarAlumno",
+    "Consultar": "ventanas.consulta_alumnos:VentanaConsultaAlumnos",
+}
+
+DESTINOS_SECRETARIA = {
+    "Alta": "ventanas.alta_secretaria:VentanaAltaSecretaria",
+    "Baja": "ventanas.baja_secretaria:VentanaBajaSecretaria",
+    "Modificar": "ventanas.modificar_secretaria:VentanaModificarSecretaria",
+    "Consultar": "ventanas.consulta_secretarias:VentanaConsultaSecretarias",
+}
+
+
+def destinos_barra(orden=ORDEN_BARRA, destinos=None):
+    """{indice_en_la_barra: 'módulo:Clase'}. El 0 es siempre «Menú principal»."""
+    destinos = destinos or DESTINOS_ALUMNOS
+    return {i: destinos[nombre] for i, nombre in enumerate(orden, start=1) if nombre in destinos}
+
+
+def destinos_barra_secretaria():
+    return destinos_barra(destinos=DESTINOS_SECRETARIA)
+
+
+def navegar_a(origen, destino):
+    """Abre otra ventana del módulo y cierra la actual sin volver al menú."""
+    modulo, clase = destino.split(":")
+    ventana = getattr(importlib.import_module(modulo), clase)(origen.menu)
+    if origen.menu is not None:
+        origen.menu._modulo = ventana          # el menú conserva la referencia
+    origen._navegando = True
+    ventana.show()
+    origen.close()
 
 
 def opciones_barra(volver, orden=("Alta", "Baja", "Modificar", "Consultar")):

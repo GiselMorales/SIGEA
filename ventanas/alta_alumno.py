@@ -1,9 +1,14 @@
+import re
+
 from Logica import validaciones as v
 from Logica import alumnos as la
 from Logica.validaciones import turno_por_puntaje, SEMESTRE_INICIAL
 from ventanas.base_alta import VentanaAlta
+from ventanas.componentes import destinos_barra
 
 class VentanaAltaAlumno(VentanaAlta):
+    DESTINOS_BARRA = destinos_barra()      # Alta / Baja / Modificar / Consultar desde la barra
+
     def __init__(self, menu=None):
         super().__init__("SIGEA - Alta de alumno", "ALTA DE ALUMNO", "REGISTRAR ALUMNO", menu)
 
@@ -13,6 +18,34 @@ class VentanaAltaAlumno(VentanaAlta):
             [self.fila(self.campo("ficha", "Número de ficha"), None, pesos=(1, 2))],
             lambda d: v.validar_numero(d, "ficha", "Número de ficha", 6, 10),
         )
+
+        self.agregar_seccion(
+            "NÚMERO DE SEGURO SOCIAL",
+            [
+                self.fila(
+                    self.selector(
+                        "tiene_nss",
+                        "¿El alumno tiene NSS?",
+                        ["Sí, tiene NSS", "No tiene NSS"],
+                    ),
+                    None,
+                    pesos=(1, 2),
+                ),
+                self.fila(
+                    self.campo("nss", "NSS (11 dígitos)"),
+                    None,
+                    pesos=(1, 2),
+                ),
+            ],
+            self._validar_nss,
+        )
+        self._campo_nss = self._lectores["nss"][1]
+        self._campo_nss.setMaxLength(11)
+        selector_nss = self._lectores["tiene_nss"][1]
+        self._campo_nss.setVisible(
+            selector_nss.obtener_seleccion() == "Sí, tiene NSS"
+        )
+        selector_nss.seleccion_cambiada.connect(self._cambiar_nss)
 
         self.agregar_seccion(
             "DATOS PERSONALES",
@@ -111,6 +144,24 @@ class VentanaAltaAlumno(VentanaAlta):
             ),
         )
 
+    def _cambiar_nss(self, _indice, opcion):
+        tiene_nss = opcion == "Sí, tiene NSS"
+        self._campo_nss.setVisible(tiene_nss)
+        if not tiene_nss:
+            self._campo_nss.clear()
+
+    def _validar_nss(self, datos):
+        opcion = datos.get("tiene_nss")
+        if opcion == "No tiene NSS":
+            return {}, {"nss": None, "nss_generado": True}
+        if opcion != "Sí, tiene NSS":
+            return {"tiene_nss": "Indica si el alumno tiene NSS."}, {}
+
+        nss = v.espacios(datos.get("nss"))
+        if not re.fullmatch(r"[0-9]{11}", nss):
+            return {"nss": "NSS: escribe los 11 dígitos o indica que no tiene."}, {}
+        return {}, {"nss": nss, "nss_generado": False}
+
 
     def resumen_confirmacion(self, datos):
         apellidos = f"{datos.get('apellido_paterno', '')} {datos.get('apellido_materno') or ''}".strip()
@@ -119,6 +170,11 @@ class VentanaAltaAlumno(VentanaAlta):
             ("Nombre(s)", datos.get("nombre")),
             ("Apellidos", apellidos),
             ("CURP", datos.get("curp")),
+            (
+                "NSS",
+                "Se generará un número ficticio"
+                if datos.get("nss_generado") else datos.get("nss"),
+            ),
             ("Carrera", datos.get("carrera")),
             ("Correo personal", datos.get("correo")),
             ("Turno", turno_por_puntaje(datos["puntaje_examen_admision"])),
@@ -127,7 +183,11 @@ class VentanaAltaAlumno(VentanaAlta):
         aviso = (
             "Al registrar se crearán automáticamente:\n"
             "•  Número de control\n"
-            "•  Correo institucional (l<número de control>@acapulco.tecnm.mx)"
+            "•  Correo institucional (l<número de control>@acapulco.tecnm.mx)\n"
+            + (
+                "•  NSS ficticio de 11 dígitos (no válido ante el IMSS)"
+                if datos.get("nss_generado") else ""
+            )
         )
         return lineas, aviso
     

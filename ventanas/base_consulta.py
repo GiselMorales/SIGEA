@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ventanas.ventana import VentanaBase, Config, CampoFlotante
-from ventanas.componentes import opciones_barra
+from ventanas.componentes import opciones_barra, destinos_barra, navegar_a
 
 
 class VentanaConsulta(VentanaBase):
@@ -19,6 +19,7 @@ class VentanaConsulta(VentanaBase):
     def __init__(self, titulo_ventana, titulo, menu=None, ancho=1080, alto=660):
         super().__init__(titulo_ventana, ancho, alto)
         self.menu = menu
+        self._navegando = False
         self._total_resultados = 0
         self._armar(titulo)
         self.centrar_ventana()
@@ -63,7 +64,12 @@ class VentanaConsulta(VentanaBase):
         self.mostrar_vacio("Elige cómo consultar, escribe el valor y presiona «Consultar».")
 
     def _navegar(self, indice, texto):
-        if indice in (2, 3, 4):
+        if indice == 1:                       # «Consultar»: ya estamos aquí
+            return
+        destino = destinos_barra(("Consultar", "Alta", "Baja", "Modificar")).get(indice)
+        if destino:
+            navegar_a(self, destino)
+        else:
             self.mostrar_mensaje(texto, "Esta opción aún está en construcción.")
             self._barra.seleccionar(1)
 
@@ -199,6 +205,6 @@ class VentanaConsulta(VentanaBase):
         self.close()
 
     def closeEvent(self, evento):
-        if self.menu is not None:
+        if self.menu is not None and not self._navegando:
             self.menu.show()
         super().closeEvent(evento)

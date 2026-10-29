@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer
 from ventanas.ventana import VentanaBase, Config, CampoFlotante
 from ventanas.componentes import (
-    opciones_barra, ESTILO_BOTON_SUBIR, ESTILO_BOTON_QUITAR, ESTILO_COMBO_TIPO,
+    opciones_barra, ESTILO_BOTON_SUBIR, ESTILO_BOTON_QUITAR, ESTILO_COMBO_TIPO, navegar_a,
 )
 from Logica.validaciones import TIPOS_DOCUMENTO, PDF_MAX_ARCHIVOS
 
@@ -32,11 +32,16 @@ class _Seccion:
 
 class VentanaAlta(VentanaBase):
     ANCHO_TARJETA = 790
+    INDICE_BARRA = 1                  # opción de la barra lateral que queda marcada
+    DESTINOS_BARRA = {}               # {indice: "módulo:Clase"} (ver destinos_barra())
+    PREGUNTA_CONFIRMACION = "¿Seguro que deseas registrar estos datos?"
+    TEXTO_SI = "Sí, registrar"
     # Estructura de la ventana para dar de alta un registro (alumno, docente, inscripción, etc.)
 
     def __init__(self, titulo_ventana, titulo, texto_registrar, menu=None, ancho=1080, alto=660):
         super().__init__(titulo_ventana, ancho, alto)
         self.menu = menu
+        self._navegando = False
         self._secciones = []
         self._seccion_de = {}          # clave de campo -> indice de sección
         self._lectores = {}            # clave -> (función que lee el valor, widget para enfocar)
@@ -101,12 +106,17 @@ class VentanaAlta(VentanaBase):
         cuerpo.addWidget(self._scroll, 1)
 
         raiz.addLayout(cuerpo, 1)
-        self._barra.seleccionar(1)       # "Alta" activa
+        self._barra.seleccionar(self.INDICE_BARRA)
 
     def _navegar(self, indice, texto):
-        if indice in (2, 3, 4):
+        if indice == self.INDICE_BARRA:
+            return
+        destino = self.DESTINOS_BARRA.get(indice)
+        if destino:
+            navegar_a(self, destino)
+        else:
             self.mostrar_mensaje(texto, "Esta opción aún está en construcción.")
-            self._barra.seleccionar(1)
+            self._barra.seleccionar(self.INDICE_BARRA)
 
     def _terminar(self, texto_registrar):
         self.boton_registrar = self.crear_boton_entrar(texto_registrar, self._registrar, ancho=320, alto=54)
@@ -120,7 +130,7 @@ class VentanaAlta(VentanaBase):
         self.close()
 
     def closeEvent(self, evento):
-        if self.menu is not None:
+        if self.menu is not None and not self._navegando:
             self.menu.show()
         super().closeEvent(evento)
 
@@ -432,10 +442,10 @@ class VentanaAlta(VentanaBase):
 
         caja = QMessageBox(self)
         caja.setIcon(QMessageBox.Question)
-        caja.setWindowTitle("Confirmar registro")
-        caja.setText("¿Seguro que deseas registrar estos datos?")
+        caja.setWindowTitle("Confirmar")
+        caja.setText(self.PREGUNTA_CONFIRMACION)
         caja.setInformativeText(detalle)
-        si = caja.addButton("Sí, registrar", QMessageBox.AcceptRole)
+        si = caja.addButton(self.TEXTO_SI, QMessageBox.AcceptRole)
         no = caja.addButton("Revisar datos", QMessageBox.RejectRole)
         caja.setDefaultButton(no)
         caja.exec()

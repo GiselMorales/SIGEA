@@ -1,5 +1,6 @@
-"""Inscripciones y reinscripciones (tablas inscripciones, reinscripciones,
-periodos_escolares y documentos_pdf)."""
+
+"""Registro de inscripciones, reinscripciones y documentos de alumnos."""
+
 import re
 import shutil
 from pathlib import Path
@@ -8,21 +9,51 @@ import psycopg
 from psycopg import errors
 
 from conexiondb.db import obtener_conexion
-from Logica.validaciones import turno_por_puntaje
 
-CARPETA_DOCUMENTOS = Path(__file__).resolve().parent.parent / "documentos"
 
+RAIZ = Path(__file__).resolve().parent.parent
+CARPETA_DOCUMENTOS = RAIZ / "documentos"
+CARPETA_REPORTES = RAIZ / "reportes_generados" / "horarios_alumnos"
+
+
+# ----------------------------------------------------------------------
+# Utilidades
+# ----------------------------------------------------------------------
 
 def _nombre_seguro(nombre):
-    return re.sub(r"[^\w.\-]+", "_", nombre)
+    return re.sub(r"[^\w.\-]+", "_", str(nombre))
+
+
+def _normalizar(valor):
+    return str(valor or "").strip().lower()
+
+
+def _nombre_completo(nombres, paterno, materno):
+    return " ".join(
+        str(parte).strip()
+        for parte in (nombres, paterno, materno)
+        if parte and str(parte).strip()
+    )
 
 
 # ----------------------------------------------------------------------
-#  Búsqueda del alumno (por número de control o por número de ficha)
+# Búsqueda del alumno por número de control o número de ficha
 # ----------------------------------------------------------------------
+
 def buscar_alumno(clave):
-    """Devuelve (alumno | None, mensaje_de_error | None)."""
+    """
+    Devuelve (alumno, None) si encuentra al alumno.
+    Devuelve (None, mensaje) si existe un problema.
+    Devuelve (None, None) si no encuentra coincidencias.
+    """
+
+    clave = str(clave or "").strip()
+
+    if not clave:
+        return None, "Escribe el número de control o número de ficha."
+
     conexion = obtener_conexion()
+
     if conexion is None:
         return None, "No fue posible conectar con la base de datos."
 
@@ -30,62 +61,110 @@ def buscar_alumno(clave):
         with conexion.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT numero_control, nombres, apellido_paterno,
-                       apellido_materno, estado_alumno
+                SELECT
+                    numero_control,
+                    numero_ficha,
+                    nombres,
+                    apellido_paterno,
+                    apellido_materno,
+                    estado_alumno,
+                    turno,
+                    semestre_actual
                 FROM public.alumnos
-                WHERE numero_control = %s OR numero_ficha = %s
-                ORDER BY (numero_control = %s) DESC
+                WHERE numero_control::text = %s
+                   OR numero_ficha::text = %s
+                ORDER BY
+                    CASE WHEN numero_control::text = %s
+                         THEN 0 ELSE 1 END
                 LIMIT 1
                 """,
                 (clave, clave, clave),
             )
+
             fila = cursor.fetchone()
 
         if fila is None:
             return None, None
 
-        nombre = " ".join(p for p in (fila[1], fila[2], fila[3]) if p)
-        if (fila[4] or "").lower() == "baja":
+        alumno = {
+            "numero_control": fila[0],
+            "ficha": fila[1],
+            "nombre": _nombre_completo(fila[2], fila[3], fila[4]),
+            "estado": fila[5],
+            "turno": fila[6],
+            "semestre_actual": fila[7],
+        }
+
+        if _normalizar(alumno["estado"]) == "baja":
             return None, "Ese alumno está dado de baja."
-        return {"numero_control": fila[0], "nombre": nombre, "estado": fila[4]}, None
+
+        if _normalizar(alumno["estado"]) == "egresado":
+            return None, "Ese alumno ya está egresado."
+
+        return alumno, None
 
     except psycopg.Error as error:
         print(f"Error al buscar alumno: {error}")
         return None, "No se pudo consultar la base de datos."
+
     finally:
         conexion.close()
 
 
 # ----------------------------------------------------------------------
-#  Documentos PDF
+# Registro de documentos PDF proporcionados por el usuario
 # ----------------------------------------------------------------------
+
 def _registrar_documentos(cursor, numero_control, documentos):
-    """Guarda los metadatos en documentos_pdf (dentro de la transacción).
-    Devuelve [(origen, destino)] para copiar los archivos después del commit."""
+    """
+    Guarda los metadatos en documentos_pdf y prepara las copias.
+    Los documentos se guardan dentro de la transacción de inscripción.
+    """
+
     pendientes = []
-    for doc in documentos or []:
-        origen = Path(doc["ruta"])
-        nombre = f"{numero_control}_{doc['tipo']}_{_nombre_seguro(origen.name)}"
+
+    for documento in documentos or []:
+        origen = Path(documento["ruta"])
+        tipo = str(documento["tipo"]).strip()
+
+        if not origen.is_file():
+            raise ValueError(
+                f"No se encontró el archivo seleccionado: {origen.name}"
+            )
+
+        nombre = (
+            f"{numero_control}_{_nombre_seguro(tipo)}_"
+            f"{_nombre_seguro(origen.name)}"
+        )
+
+        ruta_relativa = (Path("documentos") / nombre).as_posix()
+
         cursor.execute(
             """
             INSERT INTO public.documentos_pdf
                 (numero_control, tipo_documento, nombre_archivo, ruta_archivo)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT (numero_control, tipo_documento)
-            DO UPDATE SET nombre_archivo = EXCLUDED.nombre_archivo,
-                          ruta_archivo   = EXCLUDED.ruta_archivo,
-                          fecha_carga    = CURRENT_TIMESTAMP
+            DO UPDATE SET
+                nombre_archivo = EXCLUDED.nombre_archivo,
+                ruta_archivo = EXCLUDED.ruta_archivo,
+                fecha_carga = CURRENT_TIMESTAMP
             """,
-            (numero_control, doc["tipo"], nombre, f"documentos/{nombre}"),
+            (numero_control, tipo, nombre, ruta_relativa),
         )
+
         pendientes.append((origen, CARPETA_DOCUMENTOS / nombre))
+
     return pendientes
 
 
 def _copiar_archivos(pendientes):
-    guardados, fallidos = [], []
+    guardados = []
+    fallidos = []
+
     if pendientes:
         CARPETA_DOCUMENTOS.mkdir(parents=True, exist_ok=True)
+
     for origen, destino in pendientes:
         try:
             shutil.copy2(origen, destino)
@@ -93,178 +172,507 @@ def _copiar_archivos(pendientes):
         except OSError as error:
             print(f"No se pudo copiar {origen}: {error}")
             fallidos.append(origen.name)
+
     return guardados, fallidos
 
 
-def _validar_horario(cursor, horario_id, semestre, turno):
-    """El horario debe existir, ser del semestre elegido y del turno del alumno."""
+# ----------------------------------------------------------------------
+# Consultar grupos disponibles para el alumno
+# ----------------------------------------------------------------------
+
+def _consultar_grupos(cursor, periodo_id, clave, turno, semestre):
+    """
+    Obtiene los grupos activos del periodo, turno y semestre seleccionados.
+    Cada grupo corresponde a una materia.
+    """
+
     cursor.execute(
-        "SELECT semestre, turno FROM public.horarios_semestre "
-        "WHERE horario_semestre_id = %s",
-        (horario_id,),
+        """
+        SELECT
+            g.grupo_id,
+            g.cupo,
+            m.nombre
+        FROM public.grupos AS g
+        JOIN public.materias AS m
+            ON m.materia_id = g.materia_id
+        WHERE g.periodo_id = %s
+          AND g.clave_grupo = %s
+          AND LOWER(g.turno) = %s
+          AND m.semestre = %s
+          AND g.activo = TRUE
+          AND EXISTS (
+              SELECT 1
+              FROM public.horarios AS h
+              WHERE h.grupo_id = g.grupo_id
+          )
+        ORDER BY m.clave
+        """,
+        (periodo_id, clave, turno, semestre),
     )
-    fila = cursor.fetchone()
-    if fila is None:
-        raise ValueError("El horario seleccionado ya no existe.")
-    if fila[0] != semestre:
-        raise ValueError(f"Ese horario es del semestre {fila[0]}, no del {semestre}.")
-    if turno and fila[1] != turno:
-        raise ValueError(
-            f"El alumno es del turno {turno} y ese horario es {fila[1]}."
+
+    return cursor.fetchall()
+
+
+# ----------------------------------------------------------------------
+# Datos necesarios para generar el PDF del horario
+# ----------------------------------------------------------------------
+
+def _datos_pdf_horario(
+    cursor, alumno, periodo, semestre, turno, clave, grupo_ids
+):
+    cursor.execute(
+        """
+        SELECT
+            m.clave,
+            m.nombre,
+            m.creditos,
+            d.apellido_paterno,
+            COALESCE(d.apellido_materno, ''),
+            d.nombres,
+            g.aula,
+            g.cupo,
+            h.dia_semana,
+            h.hora_inicio,
+            h.hora_fin
+        FROM public.grupos AS g
+        JOIN public.materias AS m
+            ON m.materia_id = g.materia_id
+        JOIN public.docentes AS d
+            ON d.rfc = g.docente_rfc
+        JOIN public.horarios AS h
+            ON h.grupo_id = g.grupo_id
+        WHERE g.grupo_id = ANY(%s)
+        ORDER BY
+            m.clave,
+            CASE LOWER(h.dia_semana)
+                WHEN 'lunes' THEN 1
+                WHEN 'martes' THEN 2
+                WHEN 'miércoles' THEN 3
+                WHEN 'miercoles' THEN 3
+                WHEN 'jueves' THEN 4
+                WHEN 'viernes' THEN 5
+                WHEN 'sábado' THEN 6
+                WHEN 'sabado' THEN 6
+                ELSE 7
+            END,
+            h.hora_inicio
+        """,
+        (grupo_ids,),
+    )
+
+    materias = {}
+
+    for fila in cursor.fetchall():
+        clave_materia = fila[0]
+
+        materia = materias.setdefault(
+            clave_materia,
+            {
+                "clave": fila[0],
+                "nombre": fila[1],
+                "creditos": fila[2],
+                "docente": _nombre_completo(fila[5], fila[3], fila[4]),
+                "aula": fila[6] or "",
+                "cupo": fila[7],
+                "bloques": [],
+            },
         )
 
+        materia["bloques"].append((fila[8], fila[9], fila[10]))
+
+    return {
+        "periodo": periodo,
+        "semestre": semestre,
+        "turno": turno,
+        "clave": clave,
+        "numero_control": alumno["numero_control"],
+        "alumno_nombre": alumno["nombre"],
+        "materias": list(materias.values()),
+    }
+
 
 # ----------------------------------------------------------------------
-#  Registro del trámite
+# Registro de inscripción o reinscripción
 # ----------------------------------------------------------------------
+
 def registrar_tramite(datos):
-    """Inscripción (nuevo ingreso) o reinscripción, según datos['tipo_inscripcion']."""
-    tipo = datos["tipo_inscripcion"]
-    numero_control = datos["numero_control"]
-    semestre = int(datos["semestre"])
-    horario_id = datos.get("horario_id")
-    if not horario_id:
-        return False, "Selecciona el horario del semestre."
+    """
+    Registra una inscripción o reinscripción, asigna las materias del grupo,
+    guarda documentos y genera el PDF del horario.
+    """
+
+    tipo = str(datos.get("tipo_inscripcion") or "").strip()
+
+    if tipo not in ("Inscripción", "Reinscripción"):
+        return False, "Selecciona Inscripción o Reinscripción."
+
+    numero_control = str(datos.get("numero_control") or "").strip()
+    periodo = str(datos.get("periodo") or "").strip()
+    clave = str(datos.get("horario_clave") or "").strip().upper()
+    turno = _normalizar(datos.get("horario_turno"))
+    print("DEBUG datos recibidos:", datos)
+    print("DEBUG horario_turno:", repr(datos.get("horario_turno")))
+
+    if not numero_control:
+        return False, "No se recibió el número de control del alumno."
+
+    if not periodo:
+        return False, "Selecciona el periodo escolar."
+
+    if not clave:
+        return False, "Selecciona el grupo del alumno."
+
+    if turno not in ("matutino", "vespertino","Matutino", "Vespertino"):
+        return False, "Selecciona un turno válido."
+
+    try:
+        semestre = int(datos["semestre"])
+    except (KeyError, TypeError, ValueError):
+        return False, "Selecciona un semestre válido."
+
+    if not 1 <= semestre <= 12:
+        return False, "El semestre debe estar entre 1 y 12."
 
     conexion = obtener_conexion()
+
     if conexion is None:
         return False, "No fue posible conectar con la base de datos."
+
+    pendientes = []
+    grupo_ids = []
+    info_pdf = None
+    alumno_pdf = None
+    detalle_turno = turno.capitalize()
 
     try:
         with conexion:
             with conexion.cursor() as cursor:
+
+                # Bloquear el registro durante el trámite.
                 cursor.execute(
                     """
-                    SELECT estado_alumno, semestre_actual, turno,
-                           puntaje_examen_admision
+                    SELECT
+                        numero_control,
+                        estado_alumno,
+                        semestre_actual,
+                        turno,
+                        nombres,
+                        apellido_paterno,
+                        apellido_materno,
+                        puntaje_examen_admision
                     FROM public.alumnos
                     WHERE numero_control = %s
                     FOR UPDATE
                     """,
                     (numero_control,),
                 )
-                alumno = cursor.fetchone()
-                if alumno is None:
-                    raise ValueError("El alumno ya no existe en la base de datos.")
-                estado, semestre_actual, turno, puntaje = alumno
+
+                fila = cursor.fetchone()
+
+                if fila is None:
+                    raise ValueError(
+                        "El alumno ya no existe en la base de datos."
+                    )
+
+                (
+                    control_db,
+                    estado,
+                    semestre_actual,
+                    turno_alumno,
+                    nombres,
+                    apellido_paterno,
+                    apellido_materno,
+                    puntaje,
+                ) = fila
+
+                alumno_pdf = {
+                    "numero_control": control_db,
+                    "nombre": _nombre_completo(
+                        nombres, apellido_paterno, apellido_materno
+                    ),
+                }
+
+                estado = _normalizar(estado)
+                turno_alumno = _normalizar(turno_alumno)
 
                 if estado == "baja":
                     raise ValueError("El alumno está dado de baja.")
+
                 if estado == "egresado":
                     raise ValueError("El alumno ya está egresado.")
 
+                if turno_alumno and turno_alumno != turno:
+                    raise ValueError(
+                        f"El alumno tiene turno {turno_alumno.capitalize()}. "
+                        "Selecciona un grupo de ese turno."
+                    )
+
+                # Determinar el periodo escolar.
                 cursor.execute(
-                    "SELECT periodo_id FROM public.periodos_escolares WHERE nombre = %s",
-                    (datos["periodo"],),
+                    """
+                    SELECT periodo_id
+                    FROM public.periodos_escolares
+                    WHERE UPPER(nombre) = UPPER(%s)
+                    LIMIT 1
+                    """,
+                    (periodo,),
                 )
+
                 fila_periodo = cursor.fetchone()
+
                 if fila_periodo is None:
                     raise ValueError(
-                        f"El periodo {datos['periodo']} no está dado de alta "
-                        "en periodos_escolares."
+                        f"El periodo '{periodo}' no está dado de alta."
                     )
+
                 periodo_id = fila_periodo[0]
 
+                # Validaciones según el tipo de trámite.
                 if tipo == "Inscripción":
                     if estado != "aspirante":
                         raise ValueError(
-                            "Ese alumno ya fue inscrito. Para continuar usa el "
-                            "trámite de Reinscripción."
+                            "Ese alumno ya fue inscrito. "
+                            "Para continuar utiliza Reinscripción."
                         )
-                    turno_asignado = turno
-                    if not turno_asignado and puntaje is not None:
-                        turno_asignado = turno_por_puntaje(puntaje).lower()
-                    if not turno_asignado:
-                        raise ValueError("El alumno no tiene turno asignado.")
 
-                    _validar_horario(cursor, horario_id, semestre, turno_asignado)
+                    if semestre != 1:
+                        raise ValueError(
+                            "La inscripción de nuevo ingreso corresponde "
+                            "al primer semestre."
+                        )
+
                     cursor.execute(
                         """
                         INSERT INTO public.inscripciones
-                            (numero_control, periodo_ingreso_id,
-                             semestre_asignado, turno_asignado,
-                             horario_semestre_id)
-                        VALUES (%s, %s, %s, %s, %s)
+                            (
+                                numero_control,
+                                periodo_ingreso_id,
+                                semestre_asignado,
+                                turno_asignado
+                            )
+                        VALUES (%s, %s, %s, %s)
                         """,
-                        (numero_control, periodo_id, semestre, turno_asignado,
-                         horario_id),
+                        (numero_control, periodo_id, semestre, turno),
                     )
-                    cursor.execute(
-                        """
-                        UPDATE public.alumnos
-                        SET estado_alumno = 'activo',
-                            semestre_actual = %s,
-                            turno = %s
-                        WHERE numero_control = %s
-                        """,
-                        (semestre, turno_asignado, numero_control),
-                    )
-                    detalle = f"Turno: {turno_asignado.capitalize()}\n"
+
                 else:
                     if estado == "aspirante":
                         raise ValueError(
-                            "Ese alumno aún no está inscrito. Primero realiza "
-                            "su Inscripción."
+                            "Primero realiza la inscripción del alumno."
                         )
+
+                    if semestre <= 1:
+                        raise ValueError(
+                            "La reinscripción corresponde al segundo "
+                            "semestre en adelante."
+                        )
+
                     if semestre_actual and semestre < semestre_actual:
                         raise ValueError(
                             f"El alumno cursa el semestre {semestre_actual}; "
                             "no puede reinscribirse a uno menor."
                         )
-                    _validar_horario(cursor, horario_id, semestre, turno)
+
                     cursor.execute(
                         """
                         INSERT INTO public.reinscripciones
-                            (numero_control, periodo_id, semestre,
-                             horario_semestre_id)
-                        VALUES (%s, %s, %s, %s)
+                            (numero_control, periodo_id, semestre)
+                        VALUES (%s, %s, %s)
                         """,
-                        (numero_control, periodo_id, semestre, horario_id),
+                        (numero_control, periodo_id, semestre),
                     )
+
+                    # Cerrar las materias inscritas en periodos anteriores.
                     cursor.execute(
                         """
-                        UPDATE public.alumnos
-                        SET semestre_actual = %s
-                        WHERE numero_control = %s
+                        UPDATE public.alumno_grupo AS ag
+                        SET estado = 'finalizado'
+                        FROM public.grupos AS g
+                        WHERE ag.grupo_id = g.grupo_id
+                          AND ag.numero_control = %s
+                          AND ag.estado = 'inscrito'
+                          AND g.periodo_id <> %s
                         """,
-                        (semestre, numero_control),
+                        (numero_control, periodo_id),
                     )
-                    detalle = ""
 
-                pendientes = _registrar_documentos(
-                    cursor, numero_control, datos.get("documentos")
+                # Recuperar las materias del grupo elegido.
+                grupos = _consultar_grupos(
+                    cursor, periodo_id, clave, turno, semestre
                 )
 
-        # La transacción ya se confirmó: ahora se copian los PDF.
+                if not grupos:
+                    raise ValueError(
+                        "No se encontraron materias activas con horario "
+                        "para el grupo, periodo, semestre y turno elegidos."
+                    )
+
+                for grupo_id, cupo, nombre_materia in grupos:
+
+                    # Comprobar si el alumno ya pertenece al grupo.
+                    cursor.execute(
+                        """
+                        SELECT estado
+                        FROM public.alumno_grupo
+                        WHERE numero_control = %s
+                          AND grupo_id = %s
+                        LIMIT 1
+                        """,
+                        (numero_control, grupo_id),
+                    )
+
+                    existente = cursor.fetchone()
+
+                    if existente:
+                        if existente[0] != "inscrito":
+                            cursor.execute(
+                                """
+                                UPDATE public.alumno_grupo
+                                SET estado = 'inscrito'
+                                WHERE numero_control = %s
+                                  AND grupo_id = %s
+                                """,
+                                (numero_control, grupo_id),
+                            )
+
+                        grupo_ids.append(grupo_id)
+                        continue
+
+                    # Comprobar el cupo disponible.
+                    cursor.execute(
+                        """
+                        SELECT COUNT(*)
+                        FROM public.alumno_grupo
+                        WHERE grupo_id = %s
+                          AND estado = 'inscrito'
+                        """,
+                        (grupo_id,),
+                    )
+
+                    inscritos = cursor.fetchone()[0]
+
+                    if inscritos >= cupo:
+                        raise ValueError(
+                            f"No hay cupo disponible en {nombre_materia} "
+                            f"del grupo {clave}."
+                        )
+
+                    cursor.execute(
+                        """
+                        INSERT INTO public.alumno_grupo
+                            (numero_control, grupo_id, estado)
+                        VALUES (%s, %s, 'inscrito')
+                        """,
+                        (numero_control, grupo_id),
+                    )
+
+                    grupo_ids.append(grupo_id)
+
+                # Actualizar el estado académico del alumno.
+                cursor.execute(
+                    """
+                    UPDATE public.alumnos
+                    SET estado_alumno = 'activo',
+                        semestre_actual = %s,
+                        turno = %s
+                    WHERE numero_control = %s
+                    """,
+                    (semestre, turno, numero_control),
+                )
+
+                # Guardar los metadatos de los documentos proporcionados.
+                pendientes = _registrar_documentos(
+                    cursor,
+                    numero_control,
+                    datos.get("documentos"),
+                )
+
+                # Preparar los datos para generar el horario.
+                info_pdf = _datos_pdf_horario(
+                    cursor,
+                    alumno_pdf,
+                    periodo,
+                    semestre,
+                    turno,
+                    clave,
+                    grupo_ids,
+                )
+
+        # La transacción terminó correctamente; copiar archivos.
         guardados, fallidos = _copiar_archivos(pendientes)
+
+        ruta_pdf = None
+        aviso_pdf = ""
+
+        try:
+            CARPETA_REPORTES.mkdir(parents=True, exist_ok=True)
+
+            periodo_archivo = _nombre_seguro(periodo)
+            nombre_pdf = (
+                f"{numero_control}_{periodo_archivo}_"
+                f"{_nombre_seguro(clave)}_horario.pdf"
+            )
+
+            destino_pdf = CARPETA_REPORTES / nombre_pdf
+
+            from reportes.generador_pdf import generar_pdf_horario
+
+            generar_pdf_horario(info_pdf, destino_pdf)
+
+            ruta_pdf = str(destino_pdf)
+
+        except Exception as error:
+            print(f"No se pudo generar el PDF del horario: {error}")
+            aviso_pdf = (
+                "\nLa operación se guardó, pero no se pudo generar "
+                "el PDF del horario."
+            )
 
         mensaje = (
             f"{tipo} registrada correctamente.\n\n"
             f"Número de control: {numero_control}\n"
-            f"Periodo: {datos['periodo']}\n"
+            f"Periodo: {periodo}\n"
             f"Semestre: {semestre}\n"
-            f"{detalle}"
-            f"Horario: {datos.get('horario_texto', '-')}\n"
+            f"Turno: {detalle_turno}\n"
+            f"Grupo: {clave}\n"
+            f"Materias asignadas: {len(grupo_ids)}\n"
             f"Documentos guardados: {len(guardados)}"
         )
+
+        if ruta_pdf:
+            mensaje += f"\nPDF del horario: {ruta_pdf}"
+
         if fallidos:
             mensaje += (
-                "\n\nNo se pudieron copiar estos archivos, súbelos de nuevo:\n"
-                + "\n".join(f"• {n}" for n in fallidos)
+                "\nNo se pudieron copiar estos documentos: "
+                + ", ".join(fallidos)
             )
+
+        mensaje += aviso_pdf
+
         return True, mensaje
 
     except errors.UniqueViolation:
         if tipo == "Inscripción":
-            return False, "Ese alumno ya tiene una inscripción registrada."
-        return False, "Ese alumno ya está reinscrito en ese periodo."
+            return False, (
+                "El alumno ya tiene una inscripción registrada "
+                "o existe un registro duplicado."
+            )
+
+        return False, (
+            "El alumno ya tiene una reinscripción registrada "
+            "para ese periodo."
+        )
 
     except ValueError as error:
         return False, str(error)
 
     except psycopg.Error as error:
         print(f"Error al registrar {tipo}: {error}")
-        return False, "No se pudo guardar el trámite en la base de datos."
+        return False, (
+            "No se pudo guardar el trámite en la base de datos. "
+            "Revisa la terminal para consultar el error SQL."
+        )
 
     finally:
         conexion.close()

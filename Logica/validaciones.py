@@ -5,7 +5,6 @@ from pathlib import Path
 
 PUESTOS_SECRETARIA = [
     "Secretaria",
-    "Secretaria de control escolar",
     "Auxiliar administrativo",
     "Jefa de control escolar",
 ]
@@ -86,7 +85,6 @@ def _nombre(valor, etiqueta, obligatorio=True):
 
     return None, v.upper()
 
-
 def _fecha(valor, etiqueta, edad_min, edad_max):
     """Acepta dd/mm/aaaa (también con - o .). Devuelve (mensaje, date | None, 'dd/mm/aaaa')."""
     v = espacios(valor).replace("-", "/").replace(".", "/")
@@ -148,6 +146,15 @@ def _sangre(valor):
         return f"Tipo sanguíneo: elige uno de {', '.join(TIPOS_SANGRE)}.", v
     return None, v
 
+def _hay_escalera_digitos(digitos, largo=6):
+    """True si hay `largo` dígitos seguidos en orden ascendente o descendente (123456, 987654)."""
+    for i in range(len(digitos) - largo + 1):
+        trozo = digitos[i:i + largo]
+        pasos = {int(b) - int(a) for a, b in zip(trozo, trozo[1:])}
+        if pasos == {1} or pasos == {-1}:
+            return True
+    return False
+
 def _telefono(valor, etiqueta="Teléfono"):
     digitos = re.sub(r"\D", "", valor or "")
     if len(digitos) == 12 and digitos.startswith("52"):
@@ -156,16 +163,55 @@ def _telefono(valor, etiqueta="Teléfono"):
         return f"{etiqueta}: es obligatorio.", ""
     if len(digitos) != 10:
         return f"{etiqueta}: debe tener 10 dígitos.", digitos
-    if len(set(digitos)) == 1:
-        return f"{etiqueta}: el número no parece real.", digitos
+
+    falso = (
+        f"{etiqueta}: el número no parece real "
+        "(evita repeticiones como 1212121212 o 5555555566)."
+    )
+    if len(set(digitos)) < 4:                       # 1111111111, 1212121212, 5555555566...
+        return falso, digitos
+    if re.search(r"(\d)\1{4,}", digitos):            # 5 o más dígitos iguales seguidos
+        return falso, digitos
+    for periodo in range(1, 6):                     # patrón que se repite: 1231231231, 1234512345
+        if digitos[periodo:] == digitos[:-periodo]:
+            return falso, digitos
+    if _hay_escalera_digitos(digitos, 6):           # 1234567890, 9876543210
+        return f"{etiqueta}: no uses secuencias de dígitos como 123456.", digitos
+    if digitos[0] in "01":
+        return f"{etiqueta}: no puede empezar con 0 ni con 1.", digitos
     return None, digitos
 
 def _correo(valor):
     v = espacios(valor).lower()
     if not v:
         return "Correo: es obligatorio.", ""
-    if len(v) > 80 or not RE_CORREO.match(v):
-        return "Correo: escribe una dirección válida (ej. nombre@correo.com).", v
+    generico = "Correo: escribe una dirección válida (ej. nombre@correo.com)."
+    if len(v) > 80 or " " in v or not RE_CORREO.match(v):
+        return generico, v
+
+    local, dominio = v.split("@")
+    if not (local[0].isalnum() and local[-1].isalnum()):
+        return ("Correo: antes del @ no puede empezar ni terminar con punto o símbolo "
+                "(ej. .@gmail.com no es válido)."), v
+    if ".." in local:
+        return "Correo: no puede tener dos puntos seguidos antes del @.", v
+    sin_puntos = local.replace(".", "")
+    if len(local) < 3:
+        return "Correo: escribe al menos 3 caracteres antes del @ (a@gmail.com no es válido).", v
+    if len(set(sin_puntos)) == 1:
+        return "Correo: no puede ser un solo carácter repetido antes del @.", v
+    if not re.search(r"[a-z]", local):
+        return "Correo: debe incluir letras antes del @.", v
+
+    for parte in dominio.split("."):
+        if not parte or parte.startswith("-") or parte.endswith("-"):
+            return generico, v
+
+    if dominio == "gmail.com":
+        if re.search(r"[^a-z0-9.]", local):
+            return "Correo: Gmail solo permite letras, números y puntos antes del @.", v
+        if len(sin_puntos) < 6:
+            return "Correo: Gmail exige al menos 6 caracteres antes del @.", v
     return None, v
 
 def _opcion(valor, etiqueta, opciones, ignorar_acentos=True):
@@ -245,81 +291,96 @@ def validar_datos_personales(datos, edad_min=15, edad_max=80, pedir_rfc=False, p
 
     return errores, limpio
 
+_LET = "A-Za-zÁÉÍÓÚÜÑáéíóúüñ"
+RE_SOLO_LETRAS = re.compile(rf"^[{_LET} ]+$")
+RE_LETRAS_NUMEROS = re.compile(rf"^[{_LET}0-9 ]+$")
+_TECLADO = {"QWE", "QWER", "QWERT", "QWERTY", "ASD", "ASDF", "ASDFG",
+            "ZXC", "ZXCV", "ZXCVB"}
+
+def _racha_letras(palabra):
+    """Longitud de la racha más larga de letras consecutivas (abc o cba) en la palabra."""
+    t = sin_acentos(palabra).lower()
+    mejor = asc = desc = 1
+    for a, b in zip(t, t[1:]):
+        asc = asc + 1 if ord(b) == ord(a) + 1 else 1
+        desc = desc + 1 if ord(b) == ord(a) - 1 else 1
+        mejor = max(mejor, asc, desc)
+    return mejor
+
+def _revisar_domicilio(valor, etiqueta, min_len, max_len, solo_letras=False, exigir_letra=True):
+    """Devuelve un mensaje de error o None. Solo letras, números y espacios."""
+    if solo_letras:
+        if not RE_SOLO_LETRAS.match(valor):
+            return f"{etiqueta}: solo letras y espacios (sin números ni signos como . , / # -)."
+    elif not RE_LETRAS_NUMEROS.match(valor):
+        return f"{etiqueta}: solo letras, números y espacios (sin signos como . , / # -)."
+
+    if not min_len <= len(valor) <= max_len:
+        return f"{etiqueta}: debe tener entre {min_len} y {max_len} caracteres."
+    if exigir_letra and not re.search(f"[{_LET}]", valor):
+        return f"{etiqueta}: debe incluir letras."
+
+    compacto = valor.replace(" ", "")
+    letras = sin_acentos(compacto).lower()
+    if compacto.isalpha() and len(compacto) >= 2 and len(set(letras)) == 1:
+        return f"{etiqueta}: no puede ser una sola letra repetida."
+    if re.search(r"([a-z])\1\1", sin_acentos(valor).lower()):
+        return f"{etiqueta}: no repitas la misma letra 3 veces seguidas."
+
+    for palabra in valor.split():
+        if not palabra.isalpha():
+            continue
+        racha = _racha_letras(palabra)
+        if (
+            (len(palabra) >= 3 and racha == len(palabra))      # ABC, XYZ, CBA
+            or racha >= 4                                      # ABCD dentro de otra palabra
+            or sin_acentos(palabra).upper() in _TECLADO        # QWERTY, ASDF
+        ):
+            return f"{etiqueta}: no uses secuencias de letras como ABC."
+    return None
+
 def validar_domicilio(datos):
     errores, limpio = {}, {}
-    # Calle
-    calle = espacios(datos.get("calle"))
-    limpio["calle"] = calle.upper()
 
-    if not calle:
-        errores["calle"] = "Calle: es obligatoria."
-    elif (
-        not 1 <= len(calle) <= 80
-        or not RE_CALLE.match(calle)
-        or not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", calle)
-    ):
-        errores["calle"] = "Calle: entre 1 y 80 caracteres válidos."
-
-    # Manzana y lote
-    for clave, etiqueta in (
-        ("manzana", "Manzana"),
-        ("lote", "Lote"),
+    # (clave, etiqueta, obligatorio, min, max, solo_letras, exigir_letra)
+    for clave, etiqueta, oblig, mn, mx, solo_letras, exigir in (
+        ("calle", "Calle", "es obligatoria", 3, 80, False, True),
+        ("manzana", "Manzana", "es obligatorio", 1, 20, False, False),
+        ("lote", "Lote", "es obligatorio", 1, 20, False, False),
+        ("colonia", "Colonia", "es obligatoria", 3, 60, False, True),
+        ("municipio", "Municipio", "es obligatorio", 3, 60, True, True),
     ):
         valor = espacios(datos.get(clave))
         limpio[clave] = valor.upper()
-
         if not valor:
-            errores[clave] = f"{etiqueta}: es obligatorio."
-        elif (
-            len(valor) > 20
-            or not re.fullmatch(r"[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ./\- ]+", valor)
-        ):
-            errores[clave] = f"{etiqueta}: máximo 20 caracteres válidos."
-
-    # Colonia
-    colonia = espacios(datos.get("colonia"))
-    limpio["colonia"] = colonia.upper()
-
-    if not colonia:
-        errores["colonia"] = "Colonia: es obligatoria."
-    elif not 3 <= len(colonia) <= 60 or not RE_CALLE.match(colonia):
-        errores["colonia"] = "Colonia: entre 3 y 60 caracteres."
+            errores[clave] = f"{etiqueta}: {oblig}."
+            continue
+        msg = _revisar_domicilio(valor, etiqueta, mn, mx, solo_letras, exigir)
+        if msg:
+            errores[clave] = msg
 
     # Código postal
     cp = espacios(datos.get("cp"))
     limpio["cp"] = cp
-
     if not cp:
         errores["cp"] = "Código postal: es obligatorio."
     elif not (cp.isdigit() and len(cp) == 5):
         errores["cp"] = "Código postal: debe tener 5 dígitos."
-
-    # Municipio
-    municipio = espacios(datos.get("municipio"))
-    limpio["municipio"] = municipio.upper()
-
-    if not municipio:
-        errores["municipio"] = "Municipio: es obligatorio."
-    elif (
-        not 2 <= len(municipio) <= 100
-        or not RE_CALLE.match(municipio)
-        or not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", municipio)
-    ):
-        errores["municipio"] = "Municipio: escribe un nombre válido."
+    elif len(set(cp)) == 1:
+        errores["cp"] = "Código postal: no parece real (no repitas el mismo dígito)."
 
     # Estado
     msg, estado = _opcion(datos.get("estado"), "Estado", ESTADOS)
     limpio["estado"] = estado
-
     if msg:
         errores["estado"] = msg
 
     # País
     pais = espacios(datos.get("pais")) or "México"
     limpio["pais"] = pais.upper()
-
-    if len(pais) > 60 or not RE_CALLE.match(pais):
-        errores["pais"] = "País: máximo 60 caracteres válidos."
+    msg = _revisar_domicilio(pais, "País", 3, 60, solo_letras=True)
+    if msg:
+        errores["pais"] = msg
 
     return errores, limpio
 
@@ -490,42 +551,6 @@ def validar_profesional_docente(datos):
 
     return errores, limpio
 
-def validar_inscripcion(datos):
-    errores, limpio = {}, {}
-
-    tipo = espacios(datos.get("tipo_inscripcion"))
-    limpio["tipo_inscripcion"] = tipo
-    if tipo not in TIPOS_INSCRIPCION:
-        errores["tipo_inscripcion"] = "Tipo de trámite: elige Inscripción o Reinscripción."
-
-    periodo = espacios(datos.get("periodo")).upper()
-    limpio["periodo"] = periodo
-    if not periodo:
-        errores["periodo"] = "Periodo: es obligatorio."
-    elif periodo not in periodos_disponibles():
-        errores["periodo"] = "Periodo: usa el formato AGO-DIC 2026 o ENE-JUN 2027."
-
-    msg, carrera = _opcion(datos.get("carrera"), "Carrera", CARRERAS)
-    limpio["carrera"] = carrera
-    if msg:
-        errores["carrera"] = msg
-
-    msg, sem = _validar_semestre(datos.get("semestre"))
-    limpio["semestre"] = sem
-    if msg:
-        errores["semestre"] = msg
-    elif tipo == "Inscripción" and sem != str(SEMESTRE_INICIAL):
-        errores["semestre"] = f"Semestre: una inscripción es de primer semestre ({SEMESTRE_INICIAL})."
-
-    grupo = espacios(datos.get("grupo")).upper().replace(" ", "")
-    limpio["grupo"] = grupo
-    if not grupo:
-        errores["grupo"] = "Grupo: es obligatorio."
-    elif not re.fullmatch(r"[A-Z0-9]{1,6}", grupo):
-        errores["grupo"] = "Grupo: de 1 a 6 letras o números (ej. 7A)."
-
-    return errores, limpio
-
 #  ARCHIVOS PDF
 def validar_pdf(ruta):
     """Devuelve un mensaje de error, o None si el archivo es un PDF aceptable."""
@@ -554,7 +579,6 @@ TIPOS_DOCUMENTO = {
     "comprobante_domicilio": "Comprobante de domicilio",
     "otro": "Otro",
 }
-
 
 def validar_documentos(datos, clave="documentos", minimo=1, maximo=PDF_MAX_ARCHIVOS, etiqueta="Documentos"):
     documentos = list(datos.get(clave) or [])
@@ -607,6 +631,8 @@ def validar_documentos(datos, clave="documentos", minimo=1, maximo=PDF_MAX_ARCHI
         return {clave: f"{etiqueta}: " + " ".join(errores)}, {}
 
     return {}, {clave: limpios}
+
+
 def validar_inscripcion(datos):
     errores, limpio = {}, {}
 
@@ -647,14 +673,4 @@ def validar_inscripcion(datos):
             "Semestre: una reinscripción es de segundo semestre en adelante (2 a 12)."
         )
 
-    # Grupo
-    grupo = espacios(datos.get("grupo")).upper().replace(" ", "")
-    limpio["grupo"] = grupo
-    if not grupo:
-        errores["grupo"] = "Grupo: es obligatorio."
-    elif not re.fullmatch(r"[A-Z0-9]{1,6}", grupo):
-        errores["grupo"] = "Grupo: de 1 a 6 letras o números (ej. 7A)."
-
     return errores, limpio
-
-

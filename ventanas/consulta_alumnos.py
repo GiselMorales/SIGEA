@@ -6,8 +6,7 @@ from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QDesktopServices, QColor
 
 from conexiondb.db import obtener_conexion
-from reportes.generador_pdf_consulta import generar_pdf_consulta
-from reportes.generador_pdf import generar_pdf_oficial
+from reportes.generador_pdf import generar_pdf_oficial, generar_pdf_consulta
 from ventanas.base_consulta import VentanaConsulta
 from ventanas.ventana import Config
 
@@ -15,10 +14,10 @@ from ventanas.ventana import Config
 CARPETA_SALIDA = Path(__file__).resolve().parent.parent / "reportes_generados"
 
 COLOR_ESTATUS = {
-    "Activo": "#28882C",
+    "Activo": "#2E7D32",
     "Aspirante": Config.AZUL_ENTRAR,
     "Baja": "#C0392B",
-    "Egresado": "#0037FF",
+    "Egresado": "#6A1B9A",
 }
 
 
@@ -200,17 +199,11 @@ class VentanaConsultaAlumnos(VentanaConsulta):
                 ruta = CARPETA_SALIDA / f"alumno_{a['control']}_{marca}.pdf"
                 generar_pdf_oficial(
                     {
-                        "campos": [
-                            ("Nombre", a["nombre"]),
-                            ("Número de control", a["control"]),
-                            ("CURP", a["curp"]),
-                            ("Carrera", a["carrera"]),
-                            ("Semestre", a["semestre"]),
-                            ("Turno", a["turno"]),
-                            ("Estatus", a["estatus"]),
-                        ],
+                        "nombre": a["nombre"],
+                        "numero_control": a["control"],
+                        "fecha": datetime.now().strftime("%d/%m/%Y"),
                     },
-                    ruta,
+                    str(ruta),
                 )
             else:
                 filas_pdf = [
@@ -227,7 +220,7 @@ class VentanaConsultaAlumnos(VentanaConsulta):
                     "CONSULTA DE ALUMNOS",
                     self.COLUMNAS_PDF,
                     filas_pdf,
-                    ruta,
+                    str(ruta),
                     anchos=self.ANCHOS_PDF,
                     filtro=self._filtro_texto,
                     resumen=f"Total: {len(alumnos)}   Mujeres: {mujeres}   Hombres: {hombres}",
