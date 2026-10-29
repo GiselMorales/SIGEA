@@ -1,6 +1,7 @@
 import hmac
 
 import psycopg
+from Logica.bitacora import registrar_entrada_secretaria
 from conexiondb.db import obtener_conexion
 
 ROLES = {
@@ -35,26 +36,27 @@ def autenticar(usuario, contrasena, tipo_usuario):
     global _intentos_fallidos
 
     if limite_superado():
-        return False, MENSAJE_LIMITE
+        return False, MENSAJE_LIMITE, None
 
     usuario = (usuario or "").strip()
     rol_esperado = ROLES.get(tipo_usuario)
 
     if not usuario or not contrasena:
-        return False, "Ingresa tu usuario y contraseña."
+        return False, "Ingresa tu usuario y contraseña.", None
 
     if rol_esperado is None:
-        return False, "Selecciona un tipo de usuario válido."
+        return False, "Selecciona un tipo de usuario válido.", None
 
     conexion = obtener_conexion()
     if conexion is None:
-        return False, "No fue posible conectar con la base de datos."
+        return False, "No fue posible conectar con la base de datos.", None
 
+    acceso_id = None
     try:
         with conexion.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT contrasena, rol, activo
+                SELECT usuario_id, contrasena, rol, activo
                 FROM public.usuarios
                 WHERE nombre_usuario = %s
                 """,
@@ -63,28 +65,47 @@ def autenticar(usuario, contrasena, tipo_usuario):
             registro = cursor.fetchone()
 
         if registro is None:
-            return _fallo("Usuario o contraseña incorrectos.")
+            correcto, mensaje = _fallo("Usuario o contraseña incorrectos.")
+            return correcto, mensaje, None
 
-        contrasena_guardada, rol_guardado, activo = registro
+        usuario_id, contrasena_guardada, rol_guardado, activo = registro
 
         if not activo:
-            return False, "La cuenta está desactivada."
+            return False, "La cuenta está desactivada.", None
 
         # comparación en tiempo constante
         if not hmac.compare_digest(
             contrasena.encode("utf-8"),
             (contrasena_guardada or "").encode("utf-8"),
         ):
-            return _fallo("Usuario o contraseña incorrectos.")
+            correcto, mensaje = _fallo("Usuario o contraseña incorrectos.")
+            return correcto, mensaje, None
 
         if (rol_guardado or "").lower() != rol_esperado:
-            return _fallo("El tipo de usuario seleccionado no corresponde a esta cuenta.")
+            correcto, mensaje = _fallo(
+                "El tipo de usuario seleccionado no corresponde a esta cuenta."
+            )
+            return correcto, mensaje, None
+
+        if usuario.casefold() != "admin":
+            try:
+                with conexion.cursor() as cursor:
+                    acceso_id = registrar_entrada_secretaria(
+                        cursor, usuario_id, usuario, rol_esperado
+                    )
+                conexion.commit()
+            except psycopg.Error as error:
+                print(f"No se pudo registrar el acceso del usuario: {error}")
+                return False, (
+                    "No se pudo registrar tu acceso. Verifica que la bitácora "
+                    "de accesos esté instalada en Supabase."
+                ), None
 
         _intentos_fallidos = 0
-        return True, f"Bienvenido(a), {usuario}."
+        return True, f"Bienvenido(a), {usuario}.", acceso_id
 
     except psycopg.Error as error:
         print(f"Error en autenticar: {error}")
-        return False, "Ocurrió un error al consultar la base de datos."
+        return False, "Ocurrió un error al consultar la base de datos.", None
     finally:
         conexion.close()

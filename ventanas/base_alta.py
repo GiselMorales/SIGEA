@@ -451,6 +451,10 @@ class VentanaAlta(VentanaBase):
         caja.exec()
         return caja.clickedButton() is si
 
+    def despues_de_registrar(self, _datos, _mensaje):
+        """Permite que un alta continúe en otro flujo tras guardar correctamente."""
+        return False
+
     # ------------------------------------------------------------------
     #  Registrar / limpiar
     # ------------------------------------------------------------------
@@ -466,7 +470,8 @@ class VentanaAlta(VentanaBase):
         ok, mensaje = self.guardar(datos)
         if ok:
             self.mostrar_mensaje("SIGEA", mensaje)
-            self.limpiar()
+            if not self.despues_de_registrar(datos, mensaje):
+                self.limpiar()
         else:
             self.mostrar_advertencia("SIGEA", mensaje)
 
