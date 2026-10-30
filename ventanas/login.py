@@ -3,6 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QFrame
 from PySide6.QtCore import Qt, QTimer
 
+from Logica.bitacora import registrar_salida
 from Logica.login import autenticar
 from ventanas.ventana import VentanaBase, Config, ruta_recurso
 from ventanas.menu_secretaria import VentanaMenuAdmin
@@ -16,6 +17,7 @@ class VentanaLogin(VentanaBase):
     def __init__(self):
         super().__init__("SIGEA - Portal de Gestión Académica", 980, 600)
         self._verificando = False
+        self._acceso_id = None
         self.crear_interfaz()
         self.centrar_ventana()
 
@@ -87,11 +89,20 @@ class VentanaLogin(VentanaBase):
         if self._verificando:
             return
 
+        if self._acceso_id is not None:
+            cerrado, problema = registrar_salida(self._acceso_id)
+            if not cerrado:
+                self.mostrar_advertencia("Bitácora de accesos", problema)
+                return
+            self._acceso_id = None
+
         usuario = self.campo_usuario.valor().strip()
         contrasena = self.campo_password.valor()
         tipo_usuario = self.selector_tipo.obtener_seleccion()
 
-        correcto, mensaje = autenticar(usuario, contrasena, tipo_usuario)
+        correcto, mensaje, acceso_id = autenticar(
+            usuario, contrasena, tipo_usuario
+        )
 
         if not correcto:
             self.mostrar_advertencia("No se pudo iniciar sesión", mensaje)
@@ -103,17 +114,30 @@ class VentanaLogin(VentanaBase):
         self.spinner.show()
         self.spinner.iniciar()
 
-        QTimer.singleShot(1200, lambda: self._finalizar_verificacion(usuario, tipo_usuario))
+        self._acceso_id = acceso_id
+        QTimer.singleShot(
+            1200,
+            lambda: self._finalizar_verificacion(
+                usuario, tipo_usuario, acceso_id
+            ),
+        )
 
-    def _finalizar_verificacion(self, usuario, tipo_usuario):
+    def _finalizar_verificacion(self, usuario, tipo_usuario, acceso_id):
         self.spinner.detener()
         self._verificando = False
         self.boton_login.setEnabled(True)
         self.boton_login.setText(TEXTO_BOTON)
 
         if tipo_usuario in ("Secretaría", "Administrativo"):
-            self.ventana_menu = VentanaMenuAdmin(usuario)
+            self.ventana_menu = VentanaMenuAdmin(usuario, acceso_id)
+            self._acceso_id = None
             self.ventana_menu.show()
             self.close()
         else:
             self.mostrar_mensaje("SIGEA", f"Bienvenido(a), {usuario}. Acceso como docente.")
+
+    def closeEvent(self, evento):
+        if self._acceso_id is not None:
+            registrar_salida(self._acceso_id)
+            self._acceso_id = None
+        super().closeEvent(evento)

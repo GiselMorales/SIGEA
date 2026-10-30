@@ -18,11 +18,14 @@ from ventanas.componentes import ESTILO_BOTON_SUBIR, ESTILO_COMBO_TIPO, destinos
 class VentanaAltaInscripcion(VentanaAlta):
     DESTINOS_BARRA = destinos_barra()
 
-    def __init__(self, menu=None):
+    def __init__(self, menu=None, ficha=None):
         self._ultima_ruta_pdf = None
         super().__init__(
             "SIGEA - Alta de inscripción", "ALTA DE INSCRIPCIÓN", "REGISTRAR INSCRIPCIÓN", menu
         )
+        if ficha:
+            self._lectores["ficha"][1].setText(str(ficha))
+            self._validar(0)
 
     def construir_secciones(self):
         self._alumno = None

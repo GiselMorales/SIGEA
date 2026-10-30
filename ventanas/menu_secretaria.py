@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QMessageBox, QWidget
 from PySide6.QtCore import Qt
 
+from Logica.bitacora import es_administrador, registrar_salida
 from ventanas.ventana import VentanaBase, ruta_recurso
 from ventanas.componentes import InsigniaUsuario
 from ventanas.alta_alumno import VentanaAltaAlumno
@@ -10,6 +11,7 @@ from ventanas.baja_secretaria import VentanaBajaSecretaria
 from ventanas.modificar_secretaria import VentanaModificarSecretaria
 from ventanas.consulta_secretarias import VentanaConsultaSecretarias
 from ventanas.consulta_horarios import VentanaConsultaHorarios
+from ventanas.bitacora_secretarias import VentanaBitacoraSecretarias
 from ventanas.inscripciones import VentanaAltaInscripcion
 from ventanas.consulta_alumnos import VentanaConsultaAlumnos
 from ventanas.baja_alumno import VentanaBajaAlumno
@@ -46,6 +48,7 @@ ICONOS_SECRETARIA = {
     "SECRETARIA/Consultas": "consulta-icono.png",
     "SECRETARIA/Horarios": "archivo.png",
     "SECRETARIA/Consultar horarios": "consulta-icono.png",
+    "SECRETARIA/Bitácora de accesos": "consulta-icono.png",
 }
 ICONOS_ESTADISTICAS = {
     "ESTADÍSTICAS/Generar gráfica": "grafica-icono.png",
@@ -60,9 +63,11 @@ ICONOS_ESTADISTICAS = {
 
 class VentanaMenuAdmin(VentanaBase):
 
-    def __init__(self, usuario=""):
+    def __init__(self, usuario="", acceso_id=None):
         super().__init__("SIGEA - Menú del administrador", 980, 600)
         self.usuario = usuario or "Usuario"
+        self._acceso_id = acceso_id
+        self.es_admin = es_administrador(self.usuario)
 
         self.acciones = {
             "ALUMNOS/Consultas": lambda: self._abrir(VentanaConsultaAlumnos),
@@ -87,6 +92,12 @@ class VentanaMenuAdmin(VentanaBase):
             "ESTADÍSTICAS/Generar archivo/Horarios": lambda: self._abrir(VentanaReporteHorarios),
             "ESTADÍSTICAS/Generar archivo/Lista de grupos": lambda: self._abrir(VentanaReporteListaGrupo),
         }
+        if self.es_admin:
+            self.acciones["SECRETARIA/Bitácora de accesos"] = (
+                lambda: self._abrir(
+                    VentanaBitacoraSecretarias, usuario=self.usuario
+                )
+            )
 
         self.crear_interfaz()
         self.centrar_ventana()
@@ -114,6 +125,17 @@ class VentanaMenuAdmin(VentanaBase):
         fila = QHBoxLayout()
         fila.setSpacing(24)
 
+        opciones_secretaria = [
+            "Alta de secretaria",
+            "Baja de secretaria",
+            "Modificación de secretaria",
+            "Consultas",
+            "Horarios",
+            "Consultar horarios",
+        ]
+        if self.es_admin:
+            opciones_secretaria.append("Bitácora de accesos")
+
         tarjetas = [
             self.crear_tarjeta_menu(
                 "ALUMNOS",
@@ -134,14 +156,7 @@ class VentanaMenuAdmin(VentanaBase):
             ),
             self.crear_tarjeta_menu(
                 "SECRETARIA",
-                [
-                    "Alta de secretaria",
-                    "Baja de secretaria",
-                    "Modificación de secretaria",
-                    "Consultas",
-                    "Horarios",
-                    "Consultar horarios",
-                ],
+                opciones_secretaria,
                 ruta_recurso("docente.png"),
                 iconos=ICONOS_SECRETARIA,
             ),
@@ -183,3 +198,9 @@ class VentanaMenuAdmin(VentanaBase):
         )
         if respuesta == QMessageBox.Yes:
             self.close()
+
+    def closeEvent(self, evento):
+        if self._acceso_id is not None:
+            registrar_salida(self._acceso_id)
+            self._acceso_id = None
+        super().closeEvent(evento)

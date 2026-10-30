@@ -193,3 +193,14 @@ class VentanaAltaAlumno(VentanaAlta):
     
     def guardar(self, datos):
         return la.registrar_alumno(datos)
+
+    def despues_de_registrar(self, datos, _mensaje):
+        from ventanas.inscripcion import VentanaAltaInscripcion
+
+        ventana = VentanaAltaInscripcion(self.menu, ficha=datos["ficha"])
+        if self.menu is not None:
+            self.menu._modulo = ventana
+        self._navegando = True
+        ventana.show()
+        self.close()
+        return True
