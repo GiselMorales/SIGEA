@@ -8,17 +8,21 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMessageBox, QVBoxLay
 from Logica import secretaria as ls
 from reportes.generador_pdf import generar_pdf_consulta
 from ventanas.base_consulta import VentanaConsulta
-from ventanas.componentes import destinos_barra_secretaria, navegar_a
+from ventanas.componentes import (
+    ORDEN_BARRA_SECRETARIA, destinos_barra_secretaria, navegar_a,
+)
 from ventanas.ventana import Config
 
 CARPETA_SALIDA = Path(__file__).resolve().parent.parent / "reportes_generados"
-DESTINOS_CONSULTA = destinos_barra_secretaria()
 
 
 class VentanaConsultaSecretarias(VentanaConsulta):
     COLUMNAS_PDF = ["RFC", "Nombre completo", "CURP", "Puesto", "Grado", "Usuario", "Estado"]
     ANCHOS_PDF = [90, 180, 125, 150, 100, 105, 75]
     OPCIONES_FILTRO = ["Todos", "RFC", "Nombre", "CURP", "Puesto", "Usuario"]
+    ORDEN_BARRA = ORDEN_BARRA_SECRETARIA
+    INDICE_BARRA = 4
+    DESTINOS_BARRA = destinos_barra_secretaria()
 
     def __init__(self, menu=None):
         self._secretarias = []
@@ -184,16 +188,11 @@ class VentanaConsultaSecretarias(VentanaConsulta):
             QMessageBox.warning(self, "Error", "No fue posible generar el PDF.")
 
     def _navegar(self, indice, texto):
-        if indice == 1:
+        if indice in (0, self.INDICE_BARRA):
             return
-        destinos = {
-            2: DESTINOS_CONSULTA.get(1),
-            3: DESTINOS_CONSULTA.get(2),
-            4: DESTINOS_CONSULTA.get(3),
-        }
-        destino = destinos.get(indice)
+        destino = self.DESTINOS_BARRA.get(indice)
         if destino:
             navegar_a(self, destino)
         else:
             self.mostrar_mensaje(texto, "Esta opción aún está en construcción.")
-            self._barra.seleccionar(1)
+            self._barra.seleccionar(self.INDICE_BARRA)

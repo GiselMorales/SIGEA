@@ -60,35 +60,91 @@ ICONOS_BARRA = {
     "Baja": "baja-icono.png",
     "Modificar": "modificar-icono.png",
     "Consultar": "consulta-icono.png",
+    "Alta de alumno": "altaalumno-icono.png",
+    "Modificaciones": "modificar-icono.png",
+    "Inscripciones": "inscripcion-icono.png",
+    "Reinscripciones": "reinscripciones.png",
+    "Consultas": "consulta-icono.png",
+    "Alta de docente": "altadocente-icono.png",
+    "Alta de secretaria": "altadocente-icono.png",
+    "Baja de secretaria": "bajadocente-icono.png",
+    "Modificación de secretaria": "modificar-icono.png",
+    "Alta de horario": "archivo.png",
+    "Consultar horarios": "consulta-icono.png",
+    "Reporte de horarios": "archivo-pdf.png",
+    "Lista de grupos": "archivo-pdf.png",
 }
 
-
-ORDEN_BARRA = ("Alta", "Baja", "Modificar", "Consultar")
+ORDEN_BARRA_ALUMNOS = (
+    "Alta de alumno",
+    "Modificaciones",
+    "Baja",
+    "Inscripciones",
+    "Reinscripciones",
+    "Consultas",
+)
+ORDEN_BARRA_SECRETARIA = (
+    "Alta de secretaria",
+    "Baja de secretaria",
+    "Modificación de secretaria",
+    "Consultas",
+)
+ORDEN_BARRA_DOCENTE = ("Alta de docente",)
+ORDEN_BARRA_HORARIOS = ("Alta de horario", "Consultar horarios")
+ORDEN_BARRA_REPORTES = ("Reporte de horarios", "Lista de grupos")
 
 # Ventana a la que lleva cada opción de la barra lateral ("módulo:Clase").
 DESTINOS_ALUMNOS = {
-    "Alta": "ventanas.alta_alumno:VentanaAltaAlumno",
+    "Alta de alumno": "ventanas.alta_alumno:VentanaAltaAlumno",
+    "Modificaciones": "ventanas.modificar_alumno:VentanaModificarAlumno",
     "Baja": "ventanas.baja_alumno:VentanaBajaAlumno",
-    "Modificar": "ventanas.modificar_alumno:VentanaModificarAlumno",
-    "Consultar": "ventanas.consulta_alumnos:VentanaConsultaAlumnos",
+    "Inscripciones": "ventanas.inscripciones:VentanaAltaInscripcion",
+    "Reinscripciones": "ventanas.reinscripcion_anual:VentanaReinscripcionAnual",
+    "Consultas": "ventanas.consulta_alumnos:VentanaConsultaAlumnos",
 }
 
 DESTINOS_SECRETARIA = {
-    "Alta": "ventanas.alta_secretaria:VentanaAltaSecretaria",
-    "Baja": "ventanas.baja_secretaria:VentanaBajaSecretaria",
-    "Modificar": "ventanas.modificar_secretaria:VentanaModificarSecretaria",
-    "Consultar": "ventanas.consulta_secretarias:VentanaConsultaSecretarias",
+    "Alta de secretaria": "ventanas.alta_secretaria:VentanaAltaSecretaria",
+    "Baja de secretaria": "ventanas.baja_secretaria:VentanaBajaSecretaria",
+    "Modificación de secretaria": "ventanas.modificar_secretaria:VentanaModificarSecretaria",
+    "Consultas": "ventanas.consulta_secretarias:VentanaConsultaSecretarias",
+}
+
+DESTINOS_DOCENTE = {
+    "Alta de docente": "ventanas.alta_docente:VentanaAltaDocente",
+}
+
+DESTINOS_HORARIOS = {
+    "Alta de horario": "ventanas.alta_horario:VentanaAltaHorario",
+    "Consultar horarios": "ventanas.consulta_horarios:VentanaConsultaHorarios",
+}
+
+DESTINOS_REPORTES = {
+    "Reporte de horarios": "ventanas.reportes:VentanaReporteHorarios",
+    "Lista de grupos": "ventanas.reportes:VentanaReporteListaGrupo",
 }
 
 
-def destinos_barra(orden=ORDEN_BARRA, destinos=None):
+def destinos_barra(orden=ORDEN_BARRA_ALUMNOS, destinos=None):
     """{indice_en_la_barra: 'módulo:Clase'}. El 0 es siempre «Menú principal»."""
     destinos = destinos or DESTINOS_ALUMNOS
     return {i: destinos[nombre] for i, nombre in enumerate(orden, start=1) if nombre in destinos}
 
 
 def destinos_barra_secretaria():
-    return destinos_barra(destinos=DESTINOS_SECRETARIA)
+    return destinos_barra(ORDEN_BARRA_SECRETARIA, DESTINOS_SECRETARIA)
+
+
+def destinos_barra_docente():
+    return destinos_barra(ORDEN_BARRA_DOCENTE, DESTINOS_DOCENTE)
+
+
+def destinos_barra_horarios():
+    return destinos_barra(ORDEN_BARRA_HORARIOS, DESTINOS_HORARIOS)
+
+
+def destinos_barra_reportes():
+    return destinos_barra(ORDEN_BARRA_REPORTES, DESTINOS_REPORTES)
 
 
 def navegar_a(origen, destino):
@@ -102,11 +158,12 @@ def navegar_a(origen, destino):
     origen.close()
 
 
-def opciones_barra(volver, orden=("Alta", "Baja", "Modificar", "Consultar")):
+def opciones_barra(volver, orden=ORDEN_BARRA_ALUMNOS):
     """Opciones para crear_barra_vertical: [(texto, funcion, icono), ...]."""
     items = [("Menú principal", volver, ruta_recurso(ICONOS_BARRA["Menú principal"]))]
     for nombre in orden:
-        items.append((nombre, None, ruta_recurso(ICONOS_BARRA[nombre])))
+        archivo_icono = ICONOS_BARRA.get(nombre)
+        items.append((nombre, None, ruta_recurso(archivo_icono) if archivo_icono else None))
     return items
 
 

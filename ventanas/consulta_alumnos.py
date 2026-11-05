@@ -8,6 +8,7 @@ from PySide6.QtGui import QDesktopServices, QColor
 from conexiondb.db import obtener_conexion
 from reportes.generador_pdf import generar_pdf_oficial, generar_pdf_consulta
 from ventanas.base_consulta import VentanaConsulta
+from ventanas.componentes import ORDEN_BARRA_ALUMNOS, destinos_barra
 from ventanas.ventana import Config
 
 # Los PDF se guardan en <proyecto>/reportes_generados
@@ -25,6 +26,9 @@ class VentanaConsultaAlumnos(VentanaConsulta):
     COLUMNAS_PDF = ["No.", "No. control", "Nombre completo", "Carrera", "CURP", "Turno", "Sem.", "Estatus"]
     ANCHOS_PDF = [35, 75, 250, 50, 130, 70, 40, 70]
     OPCIONES_FILTRO = ["Todos", "No. control", "Nombre", "CURP"]
+    ORDEN_BARRA = ORDEN_BARRA_ALUMNOS
+    INDICE_BARRA = 6
+    DESTINOS_BARRA = destinos_barra(ORDEN_BARRA)
 
     def __init__(self, menu=None):
         super().__init__("SIGEA - Consultas de alumnos", "CONSULTAS", menu)

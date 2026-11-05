@@ -13,6 +13,7 @@ from ventanas.base_alta import VentanaAlta
 from ventanas.ventana import Config
 from ventanas.componentes import (
     ESTILO_BOTON_SUBIR, ESTILO_BOTON_QUITAR, ESTILO_COMBO_TIPO,
+    ORDEN_BARRA_HORARIOS, destinos_barra_horarios,
 )
 
 ESTILO_ENTRADA = """
@@ -36,6 +37,8 @@ def texto_bloques(bloques):
 
 
 class VentanaAltaHorario(VentanaAlta):
+    ORDEN_BARRA = ORDEN_BARRA_HORARIOS
+    DESTINOS_BARRA = destinos_barra_horarios()
 
     al_cerrar = None                 # función que se llama al cerrar la ventana
 
@@ -92,10 +95,7 @@ class VentanaAltaHorario(VentanaAlta):
         if not periodo:
             errores["periodo"] = "Periodo: es obligatorio."
         elif periodo not in periodos:
-            errores["periodo"] = (
-                "Periodo: no está dado de alta en periodos_escolares "
-                "(ejecuta sql/horarios_grupos.sql o agrégalo)."
-            )
+            errores["periodo"] = "El periodo seleccionado no está disponible."
 
         msg, semestre = v._validar_semestre(datos.get("semestre"))
         limpio["semestre"] = semestre
@@ -298,8 +298,8 @@ class VentanaAltaHorario(VentanaAlta):
             "DÍAS DE CLASE (marca uno o varios)", caja_dias
         ))
 
-        fila3.addWidget(self._con_etiqueta("INICIO (07:00–19:59)", self._hora_ini), 1)
-        fila3.addWidget(self._con_etiqueta("FIN (hasta 20:00)", self._hora_fin), 1)
+        fila3.addWidget(self._con_etiqueta("HORA DE INICIO", self._hora_ini), 1)
+        fila3.addWidget(self._con_etiqueta("HORA DE FIN", self._hora_fin), 1)
         fila3.addWidget(boton_bloque, 0, Qt.AlignBottom)
         fila3.addWidget(boton_quitar_bloque, 0, Qt.AlignBottom)
         lay.addLayout(fila3)

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QTimer
 from ventanas.ventana import VentanaBase, Config, CampoFlotante
 from ventanas.componentes import (
     opciones_barra, ESTILO_BOTON_SUBIR, ESTILO_BOTON_QUITAR, ESTILO_COMBO_TIPO, navegar_a,
+    ORDEN_BARRA_ALUMNOS, destinos_barra,
 )
 from Logica.validaciones import TIPOS_DOCUMENTO, PDF_MAX_ARCHIVOS
 
@@ -33,7 +34,8 @@ class _Seccion:
 class VentanaAlta(VentanaBase):
     ANCHO_TARJETA = 790
     INDICE_BARRA = 1                  # opción de la barra lateral que queda marcada
-    DESTINOS_BARRA = {}               # {indice: "módulo:Clase"} (ver destinos_barra())
+    ORDEN_BARRA = ORDEN_BARRA_ALUMNOS
+    DESTINOS_BARRA = destinos_barra(ORDEN_BARRA)
     PREGUNTA_CONFIRMACION = "¿Seguro que deseas registrar estos datos?"
     TEXTO_SI = "Sí, registrar"
     # Estructura de la ventana para dar de alta un registro (alumno, docente, inscripción, etc.)
@@ -82,7 +84,9 @@ class VentanaAlta(VentanaBase):
         cuerpo = QHBoxLayout()
         cuerpo.setSpacing(18)
 
-        self._barra = self.crear_barra_vertical(opciones_barra(self.volver))
+        self._barra = self.crear_barra_vertical(
+            opciones_barra(self.volver, orden=self.ORDEN_BARRA)
+        )
         self._barra.seleccionado.connect(self._navegar)
         cuerpo.addWidget(self._barra, 0, Qt.AlignTop)
 
@@ -109,7 +113,7 @@ class VentanaAlta(VentanaBase):
         self._barra.seleccionar(self.INDICE_BARRA)
 
     def _navegar(self, indice, texto):
-        if indice == self.INDICE_BARRA:
+        if indice in (0, self.INDICE_BARRA):
             return
         destino = self.DESTINOS_BARRA.get(indice)
         if destino:

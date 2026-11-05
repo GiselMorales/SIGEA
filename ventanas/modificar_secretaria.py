@@ -3,10 +3,13 @@ from datetime import date
 from Logica import validaciones as v
 from Logica import secretaria as ls
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import destinos_barra_secretaria
+from ventanas.componentes import (
+    ORDEN_BARRA_SECRETARIA, destinos_barra_secretaria,
+)
 
 
 class VentanaModificarSecretaria(VentanaAlta):
+    ORDEN_BARRA = ORDEN_BARRA_SECRETARIA
     INDICE_BARRA = 3
     DESTINOS_BARRA = destinos_barra_secretaria()
     PREGUNTA_CONFIRMACION = "¿Guardar los cambios de esta secretaria?"

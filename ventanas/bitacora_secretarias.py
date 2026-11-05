@@ -2,10 +2,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
-    QHeaderView,
-    QTableWidget,
-    QTableWidgetItem,
+    QLabel,
+    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
+    QWidget,
 )
 
 from Logica.bitacora import es_administrador, listar_entradas_secretarias
@@ -47,36 +48,57 @@ class VentanaBitacoraSecretarias(VentanaBase):
         fila_acciones.addWidget(self.boton_actualizar)
         raiz.addLayout(fila_acciones)
 
-        tarjeta = QFrame()
-        tarjeta.setObjectName("tablaBitacora")
-        tarjeta.setStyleSheet(
-            "#tablaBitacora { background: white; border-radius: 12px; }"
-        )
-        layout_tabla = QVBoxLayout(tarjeta)
-        layout_tabla.setContentsMargins(10, 10, 10, 10)
-        self.tabla = QTableWidget(0, 4)
-        self.tabla.setHorizontalHeaderLabels(
-            ["Usuario", "Tipo de usuario", "Fecha de entrada", "Fecha de salida"]
-        )
-        self.tabla.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
-        self.tabla.setAlternatingRowColors(True)
-        self.tabla.setShowGrid(False)
-        self.tabla.verticalHeader().setVisible(False)
-        self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tabla.setStyleSheet(
-            "QTableWidget { background: white; alternate-background-color: #EDF3FD; "
-            "color: #1E2A3A; border: none; selection-background-color: #D9F7FF; }"
-            "QHeaderView::section { background: #1E508E; color: white; "
-            "font-weight: bold; padding: 9px; border: none; }"
-        )
-        layout_tabla.addWidget(self.tabla)
-        raiz.addWidget(tarjeta, 1)
+        resumen = QHBoxLayout()
+        resumen.setSpacing(12)
+        self._contadores = {}
+        for clave, titulo, color in (
+            ("total", "ACCESOS REGISTRADOS", "#1E508E"),
+            ("activos", "SESIONES ACTIVAS", "#E68A00"),
+            ("secretaria", "SECRETARÍA", "#7B4CB5"),
+            ("docente", "DOCENTES", "#16876B"),
+        ):
+            tarjeta = QFrame()
+            tarjeta.setObjectName(f"resumen_{clave}")
+            tarjeta.setStyleSheet(
+                f"QFrame#resumen_{clave} {{ background: white; "
+                "border-radius: 12px; border-left: 5px solid "
+                f"{color}; }}"
+            )
+            contenido = QVBoxLayout(tarjeta)
+            contenido.setContentsMargins(14, 10, 14, 10)
+            numero = QLabel("0")
+            numero.setStyleSheet(
+                f"color: {color}; font-size: 24px; font-weight: bold; "
+                "background: transparent;"
+            )
+            etiqueta = QLabel(titulo)
+            etiqueta.setStyleSheet(
+                "color: #5B6B79; font-size: 9px; font-weight: bold; "
+                "background: transparent;"
+            )
+            contenido.addWidget(numero)
+            contenido.addWidget(etiqueta)
+            self._contadores[clave] = numero
+            resumen.addWidget(tarjeta, 1)
+        raiz.addLayout(resumen)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        self._lista = QWidget()
+        self._lista.setStyleSheet("background: transparent;")
+        self._lista_layout = QVBoxLayout(self._lista)
+        self._lista_layout.setContentsMargins(2, 2, 10, 8)
+        self._lista_layout.setSpacing(10)
+        self._scroll.setWidget(self._lista)
+        raiz.addWidget(self._scroll, 1)
 
     def actualizar(self):
         if not es_administrador(self.usuario):
             self.boton_actualizar.setEnabled(False)
-            self.tabla.setRowCount(0)
+            self._mostrar_vacio("La bitácora solo está disponible para admin.")
             self.mostrar_advertencia(
                 "Acceso restringido",
                 "La bitácora de accesos solo está disponible para admin.",
@@ -85,37 +107,136 @@ class VentanaBitacoraSecretarias(VentanaBase):
 
         registros, problema = listar_entradas_secretarias(self.usuario)
         if problema:
-            self.tabla.setRowCount(0)
+            self._mostrar_vacio(problema)
             self.mostrar_advertencia("Bitácora de accesos", problema)
             return
 
-        self.tabla.setRowCount(len(registros))
-        for fila, registro in enumerate(registros):
-            fecha_entrada = registro["fecha_entrada"]
-            fecha_entrada_texto = fecha_entrada.strftime("%d/%m/%Y %H:%M:%S")
-            fecha_salida = registro["fecha_salida"]
-            fecha_salida_texto = (
-                fecha_salida.strftime("%d/%m/%Y %H:%M:%S")
-                if fecha_salida
-                else "Sesión activa"
+        while self._lista_layout.count():
+            item = self._lista_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        total = len(registros)
+        activos = sum(not registro["fecha_salida"] for registro in registros)
+        administrativos = sum(
+            registro["tipo_usuario"] == "administrativo"
+            for registro in registros
+        )
+        docentes = sum(
+            registro["tipo_usuario"] == "docente"
+            for registro in registros
+        )
+        for clave, valor in (
+            ("total", total),
+            ("activos", activos),
+            ("secretaria", administrativos),
+            ("docente", docentes),
+        ):
+            self._contadores[clave].setText(str(valor))
+
+        if not registros:
+            self._mostrar_vacio("Todavía no hay accesos registrados.")
+            return
+
+        for registro in registros:
+            self._lista_layout.addWidget(self._tarjeta_acceso(registro))
+        self._lista_layout.addStretch(1)
+
+    def _tarjeta_acceso(self, registro):
+        tarjeta = QFrame()
+        tarjeta.setObjectName("tarjetaAcceso")
+        tarjeta.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        tarjeta.setStyleSheet(
+            "#tarjetaAcceso { background: white; border-radius: 12px; "
+            "border: 1px solid #DCE7F5; }"
+        )
+        fila = QHBoxLayout(tarjeta)
+        fila.setContentsMargins(16, 12, 16, 12)
+        fila.setSpacing(14)
+
+        icono = QLabel(
+            "S" if registro["tipo_usuario"] == "administrativo" else "D"
+        )
+        icono.setAlignment(Qt.AlignCenter)
+        icono.setFixedSize(42, 42)
+        color = (
+            "#7B4CB5"
+            if registro["tipo_usuario"] == "administrativo"
+            else "#16876B"
+        )
+        icono.setStyleSheet(
+            f"background: {color}; color: white; border-radius: 21px; "
+            "font-size: 17px; font-weight: bold;"
+        )
+        fila.addWidget(icono)
+
+        identidad = QVBoxLayout()
+        identidad.setSpacing(3)
+        usuario = QLabel(registro["usuario"])
+        usuario.setStyleSheet(
+            "color: #1E2A3A; font-size: 14px; font-weight: bold; "
+            "background: transparent;"
+        )
+        tipo = (
+            "Secretaría"
+            if registro["tipo_usuario"] == "administrativo"
+            else "Docente"
+        )
+        etiqueta_tipo = QLabel(tipo)
+        etiqueta_tipo.setStyleSheet(
+            f"color: {color}; font-size: 10px; font-weight: bold; "
+            "background: transparent;"
+        )
+        identidad.addWidget(usuario)
+        identidad.addWidget(etiqueta_tipo)
+        fila.addLayout(identidad, 1)
+
+        fechas = QVBoxLayout()
+        fechas.setSpacing(4)
+        entrada = registro["fecha_entrada"].strftime("%d/%m/%Y %H:%M:%S")
+        salida = registro["fecha_salida"]
+        salida_texto = (
+            salida.strftime("%d/%m/%Y %H:%M:%S")
+            if salida
+            else "Sesión activa"
+        )
+        for titulo, texto, color_fecha in (
+            ("ENTRADA", entrada, "#5B6B79"),
+            (
+                "SALIDA",
+                salida_texto,
+                "#E68A00" if salida is None else "#5B6B79",
+            ),
+        ):
+            detalle = QLabel(f"{titulo}  {texto}")
+            detalle.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            detalle.setStyleSheet(
+                f"color: {color_fecha}; font-size: 10px; "
+                "background: transparent;"
             )
-            tipo = (
-                "Secretaría"
-                if registro["tipo_usuario"] == "administrativo"
-                else "Docente"
-            )
-            for columna, texto in enumerate(
-                (
-                    registro["usuario"],
-                    tipo,
-                    fecha_entrada_texto,
-                    fecha_salida_texto,
-                )
-            ):
-                elemento = QTableWidgetItem(texto)
-                elemento.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-                self.tabla.setItem(fila, columna, elemento)
-        self.tabla.resizeRowsToContents()
+            fechas.addWidget(detalle)
+        fila.addLayout(fechas)
+        return tarjeta
+
+    def _mostrar_vacio(self, texto):
+        while self._lista_layout.count():
+            item = self._lista_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        mensaje = QLabel(texto)
+        mensaje.setWordWrap(True)
+        mensaje.setAlignment(Qt.AlignCenter)
+        mensaje.setStyleSheet(
+            "color: white; font-size: 13px; padding: 28px; "
+            "background: rgba(255,255,255,24); border-radius: 12px;"
+        )
+        self._lista_layout.addWidget(mensaje)
+        self._contadores["total"].setText("0")
+        self._contadores["activos"].setText("0")
+        self._contadores["secretaria"].setText("0")
+        self._contadores["docente"].setText("0")
 
     def closeEvent(self, evento):
         if self.menu is not None:

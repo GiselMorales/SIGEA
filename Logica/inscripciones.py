@@ -37,10 +37,10 @@ def _nombre_completo(nombres, paterno, materno):
 
 
 # ----------------------------------------------------------------------
-# Búsqueda del alumno por número de control o número de ficha
+# Búsqueda del alumno por número de control, número de ficha o nombre.
 # ----------------------------------------------------------------------
 
-def buscar_alumno(clave):
+def buscar_alumno(clave, permitir_nombre=False):
     """
     Devuelve (alumno, None) si encuentra al alumno.
     Devuelve (None, mensaje) si existe un problema.
@@ -59,29 +59,64 @@ def buscar_alumno(clave):
 
     try:
         with conexion.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT
-                    numero_control,
-                    numero_ficha,
-                    nombres,
-                    apellido_paterno,
-                    apellido_materno,
-                    estado_alumno,
-                    turno,
-                    semestre_actual
-                FROM public.alumnos
-                WHERE numero_control::text = %s
-                   OR numero_ficha::text = %s
-                ORDER BY
-                    CASE WHEN numero_control::text = %s
-                         THEN 0 ELSE 1 END
-                LIMIT 1
-                """,
-                (clave, clave, clave),
-            )
-
-            fila = cursor.fetchone()
+            if permitir_nombre and not clave.isdecimal():
+                cursor.execute(
+                    """
+                    SELECT
+                        numero_control,
+                        numero_ficha,
+                        nombres,
+                        apellido_paterno,
+                        apellido_materno,
+                        estado_alumno,
+                        turno,
+                        semestre_actual
+                    FROM public.alumnos
+                    WHERE position(
+                        lower(%s) IN lower(concat_ws(
+                            ' ', nombres, apellido_paterno, apellido_materno
+                        ))
+                    ) > 0
+                    ORDER BY
+                        CASE WHEN lower(concat_ws(
+                            ' ', nombres, apellido_paterno, apellido_materno
+                        )) = lower(%s) THEN 0 ELSE 1 END,
+                        apellido_paterno, apellido_materno, nombres
+                    LIMIT 2
+                    """,
+                    (clave, clave),
+                )
+                filas = cursor.fetchall()
+                if len(filas) > 1:
+                    return (
+                        None,
+                        "Hay varios alumnos con ese nombre. "
+                        "Ingresa su número de control para continuar.",
+                    )
+                fila = filas[0] if filas else None
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        numero_control,
+                        numero_ficha,
+                        nombres,
+                        apellido_paterno,
+                        apellido_materno,
+                        estado_alumno,
+                        turno,
+                        semestre_actual
+                    FROM public.alumnos
+                    WHERE numero_control::text = %s
+                       OR numero_ficha::text = %s
+                    ORDER BY
+                        CASE WHEN numero_control::text = %s
+                             THEN 0 ELSE 1 END
+                    LIMIT 1
+                    """,
+                    (clave, clave, clave),
+                )
+                fila = cursor.fetchone()
 
         if fila is None:
             return None, None
@@ -310,8 +345,6 @@ def registrar_tramite(datos):
     periodo = str(datos.get("periodo") or "").strip()
     clave = str(datos.get("horario_clave") or "").strip().upper()
     turno = _normalizar(datos.get("horario_turno"))
-    print("DEBUG datos recibidos:", datos)
-    print("DEBUG horario_turno:", repr(datos.get("horario_turno")))
 
     if not numero_control:
         return False, "No se recibió el número de control del alumno."
@@ -382,7 +415,7 @@ def registrar_tramite(datos):
                     nombres,
                     apellido_paterno,
                     apellido_materno,
-                    puntaje,
+                    _,
                 ) = fila
 
                 alumno_pdf = {
@@ -459,6 +492,11 @@ def registrar_tramite(datos):
                     if estado == "aspirante":
                         raise ValueError(
                             "Primero realiza la inscripción del alumno."
+                        )
+
+                    if semestre_actual == 1 and semestre != 2:
+                        raise ValueError(
+                            "El alumno que cursa primer semestre debe reinscribirse a segundo."
                         )
 
                     if semestre <= 1:

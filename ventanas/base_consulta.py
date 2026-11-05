@@ -4,7 +4,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ventanas.ventana import VentanaBase, Config, CampoFlotante
-from ventanas.componentes import opciones_barra, destinos_barra, navegar_a
+from ventanas.componentes import (
+    ORDEN_BARRA_ALUMNOS, destinos_barra, navegar_a, opciones_barra,
+)
 
 
 class VentanaConsulta(VentanaBase):
@@ -15,6 +17,9 @@ class VentanaConsulta(VentanaBase):
     ANCHO_CONTENIDO = 806
     TEXTO_BOTON = "Consultar"
     MAX_TARJETAS = 200            # máximo de resultados dibujados en pantalla
+    ORDEN_BARRA = ORDEN_BARRA_ALUMNOS
+    INDICE_BARRA = 1
+    DESTINOS_BARRA = destinos_barra(ORDEN_BARRA)
 
     def __init__(self, titulo_ventana, titulo, menu=None, ancho=1080, alto=660):
         super().__init__(titulo_ventana, ancho, alto)
@@ -46,7 +51,7 @@ class VentanaConsulta(VentanaBase):
         cuerpo = QHBoxLayout()
         cuerpo.setSpacing(18)
         self._barra = self.crear_barra_vertical(
-            opciones_barra(self.volver, orden=("Consultar", "Alta", "Baja", "Modificar"))
+            opciones_barra(self.volver, orden=self.ORDEN_BARRA)
         )
         self._barra.seleccionado.connect(self._navegar)
         cuerpo.addWidget(self._barra, 0, Qt.AlignTop)
@@ -60,18 +65,18 @@ class VentanaConsulta(VentanaBase):
         cuerpo.addLayout(derecha, 1)
 
         raiz.addLayout(cuerpo, 1)
-        self._barra.seleccionar(1)
+        self._barra.seleccionar(self.INDICE_BARRA)
         self.mostrar_vacio("Elige cómo consultar, escribe el valor y presiona «Consultar».")
 
     def _navegar(self, indice, texto):
-        if indice == 1:                       # «Consultar»: ya estamos aquí
+        if indice in (0, self.INDICE_BARRA):
             return
-        destino = destinos_barra(("Consultar", "Alta", "Baja", "Modificar")).get(indice)
+        destino = self.DESTINOS_BARRA.get(indice)
         if destino:
             navegar_a(self, destino)
         else:
             self.mostrar_mensaje(texto, "Esta opción aún está en construcción.")
-            self._barra.seleccionar(1)
+            self._barra.seleccionar(self.INDICE_BARRA)
 
     def _fila_totales(self):
         fila = QHBoxLayout()

@@ -1,10 +1,13 @@
 from Logica import validaciones as v
 from Logica.secretaria import registrar_secretaria
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import destinos_barra_secretaria
+from ventanas.componentes import (
+    ORDEN_BARRA_SECRETARIA, destinos_barra_secretaria,
+)
 
 
 class VentanaAltaSecretaria(VentanaAlta):
+    ORDEN_BARRA = ORDEN_BARRA_SECRETARIA
     INDICE_BARRA = 1
     DESTINOS_BARRA = destinos_barra_secretaria()
 

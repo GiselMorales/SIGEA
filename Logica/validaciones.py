@@ -73,13 +73,8 @@ def _nombre(valor, etiqueta, obligatorio=True):
 
     texto = v.lower()
 
-    for i in range (len(texto)-2):
-        a, b, c = texto[i:i +3]
-        if (
-            a.isalpha() and b.isalpha() and c.isalpha()
-            and ord(b) == ord(a) + 1 and ord(c) == ord(b) + 1
-        ):
-            return f"{etiqueta}: no uses secuencias de letras consecutivas.", v
+    for i in range(len(texto) - 2):
+        a, b, c = texto[i:i + 3]
         if a==b and b==c:
             return f"{etiqueta}: no uses la misma letra 3 veces seguidas.", v
 

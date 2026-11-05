@@ -6,11 +6,16 @@ from Logica import inscripciones as li
 from Logica import horarios as lh
 from ventanas.alta_horario import VentanaAltaHorario
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import ESTILO_BOTON_SUBIR, ESTILO_COMBO_TIPO, destinos_barra
+from ventanas.componentes import (
+    ESTILO_BOTON_SUBIR, ESTILO_COMBO_TIPO,
+    ORDEN_BARRA_ALUMNOS, destinos_barra,
+)
 
 
 class VentanaAltaInscripcion(VentanaAlta):
-    DESTINOS_BARRA = destinos_barra()
+    ORDEN_BARRA = ORDEN_BARRA_ALUMNOS
+    INDICE_BARRA = 4
+    DESTINOS_BARRA = destinos_barra(ORDEN_BARRA)
 
     def __init__(self, menu=None):
         super().__init__(
@@ -58,9 +63,6 @@ class VentanaAltaInscripcion(VentanaAlta):
             ),
         )
 
-    # ------------------------------------------------------------------
-    #  Sección 1: alumno
-    # ------------------------------------------------------------------
     def _validar_alumno(self, datos):
         # Acepta cualquier número (solo dígitos) y lo busca como control o como ficha.
         errores, limpio = v.validar_numero(
@@ -80,18 +82,13 @@ class VentanaAltaInscripcion(VentanaAlta):
         limpio["alumno_nombre"] = alumno["nombre"]
         return {}, limpio
 
-    # ------------------------------------------------------------------
-    #  Sección 2: datos del trámite (al validarse, se cargan los grupos)
-    # ------------------------------------------------------------------
+
     def _validar_datos(self, datos):
         errores, limpio = v.validar_inscripcion(datos)
         if not errores:
             self._cargar_grupos(limpio["periodo"], int(limpio["semestre"]))
         return errores, limpio
 
-    # ------------------------------------------------------------------
-    #  Sección 3: grupo y horario (matutino / vespertino)
-    # ------------------------------------------------------------------
     def _selector_horario(self):
         self.combo_horario = QComboBox()
         self.combo_horario.setFixedHeight(40)
@@ -163,7 +160,6 @@ class VentanaAltaInscripcion(VentanaAlta):
             )
 
     def _añadir_horario(self):
-        """Abre el alta de horarios; al cerrarla, la lista de grupos se actualiza sola."""
         ventana = VentanaAltaHorario(self)
         ventana.al_cerrar = self._actualizar_grupos
         self._ventana_horario = ventana

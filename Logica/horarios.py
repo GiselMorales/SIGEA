@@ -161,10 +161,7 @@ def validar_bloques(bloques):
         if fin <= inicio:
             return f"{dia.capitalize()}: la hora de fin debe ser mayor que la de inicio."
         if inicio < HORA_MIN or fin > HORA_MAX:
-            return (
-                f"{dia.capitalize()}: el horario debe estar entre "
-                f"{formato_hora(HORA_MIN)} y {formato_hora(HORA_MAX)}."
-            )
+            return f"{dia.capitalize()}: selecciona una hora dentro del horario permitido."
         for otro_inicio, otro_fin in por_dia.get(dia, []):
             if inicio < otro_fin and fin > otro_inicio:
                 return f"{dia.capitalize()}: dos bloques de la misma materia se empalman."
@@ -209,9 +206,7 @@ def crear_horario_grupo(datos):
                 )
                 fila = cursor.fetchone()
                 if fila is None:
-                    raise ValueError(
-                        f"El periodo {periodo} no está dado de alta en periodos_escolares."
-                    )
+                    raise ValueError("El periodo seleccionado no está disponible.")
                 periodo_id = fila[0]
 
                 if datos.get("crear_grupo_nuevo"):
@@ -412,11 +407,6 @@ def obtener_horario(periodo, semestre, turno, clave=None):
             filas = cursor.fetchall()
             if not filas:
                 return None
-
-            orden_dias = {
-                dia: posicion
-                for posicion, dia in enumerate(DIAS)
-            }
 
             materias = []
 

@@ -1,10 +1,13 @@
 from Logica import validaciones as v
 from Logica import secretaria as ls
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import destinos_barra_secretaria
+from ventanas.componentes import (
+    ORDEN_BARRA_SECRETARIA, destinos_barra_secretaria,
+)
 
 
 class VentanaBajaSecretaria(VentanaAlta):
+    ORDEN_BARRA = ORDEN_BARRA_SECRETARIA
     INDICE_BARRA = 2
     DESTINOS_BARRA = destinos_barra_secretaria()
     PREGUNTA_CONFIRMACION = "¿Eliminar permanentemente esta secretaria y su cuenta?"

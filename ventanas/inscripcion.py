@@ -1,27 +1,56 @@
+import re
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QPushButton, QVBoxLayout, QFileDialog, QMessageBox,
-)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import QUrl
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+)
 
 from Logica import validaciones as v
 from Logica import inscripciones as li
 from Logica import horarios as lh
 from ventanas.alta_horario import VentanaAltaHorario
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import ESTILO_BOTON_SUBIR, ESTILO_COMBO_TIPO, destinos_barra
+from ventanas.componentes import (
+    ESTILO_BOTON_SUBIR, ESTILO_COMBO_TIPO,
+    ORDEN_BARRA_ALUMNOS, destinos_barra,
+)
 
 
 class VentanaAltaInscripcion(VentanaAlta):
-    DESTINOS_BARRA = destinos_barra()
+    ORDEN_BARRA = ORDEN_BARRA_ALUMNOS
+    INDICE_BARRA = 4
+    DESTINOS_BARRA = destinos_barra(ORDEN_BARRA)
 
-    def __init__(self, menu=None, ficha=None):
+    def __init__(
+        self, menu=None, ficha=None, modo_reinscripcion_anual=False
+    ):
         self._ultima_ruta_pdf = None
+        self.modo_reinscripcion_anual = modo_reinscripcion_anual
+        self.INDICE_BARRA = 5 if modo_reinscripcion_anual else 4
+        titulo_ventana = (
+            "SIGEA - Reinscripción"
+            if modo_reinscripcion_anual
+            else "SIGEA - Alta de inscripción"
+        )
+        titulo = (
+            "REINSCRIPCIÓN"
+            if modo_reinscripcion_anual
+            else "ALTA DE INSCRIPCIÓN"
+        )
+        texto_boton = (
+            "REGISTRAR REINSCRIPCIÓN"
+            if modo_reinscripcion_anual
+            else "REGISTRAR INSCRIPCIÓN"
+        )
         super().__init__(
-            "SIGEA - Alta de inscripción", "ALTA DE INSCRIPCIÓN", "REGISTRAR INSCRIPCIÓN", menu
+            titulo_ventana, titulo, texto_boton, menu
         )
         if ficha:
             self._lectores["ficha"][1].setText(str(ficha))
@@ -31,15 +60,58 @@ class VentanaAltaInscripcion(VentanaAlta):
         self._alumno = None
         self._contexto = None            # (periodo, semestre) de los grupos cargados
 
+        etiqueta_control = (
+            "Número de control o nombre"
+            if self.modo_reinscripcion_anual
+            else "Número de ficha / control"
+        )
+        fila_alumno = [
+            self.fila(
+                self.campo("ficha", etiqueta_control),
+                None,
+                pesos=(1, 2),
+            )
+        ]
+        if self.modo_reinscripcion_anual:
+            self._resumen_alumno = self.crear_label_subtitulo(
+                "Ingresa el número de control o el nombre del alumno y valídalo "
+                "para mostrar sus datos.",
+                11,
+                "#5B6B79",
+            )
+            self._resumen_alumno.setWordWrap(True)
+            fila_alumno.append(self._resumen_alumno)
+
         self.agregar_seccion(
-            "NÚMERO DE FICHA O DE CONTROL",
-            [self.fila(self.campo("ficha", "Número de ficha / control"), None, pesos=(1, 2))],
+            (
+                "DATOS DEL ALUMNO"
+                if self.modo_reinscripcion_anual
+                else "NÚMERO DE FICHA O DE CONTROL"
+            ),
+            fila_alumno,
             self._validar_alumno,
         )
 
-        self.agregar_seccion(
-            "DATOS DE LA INSCRIPCIÓN",
-            [
+        if self.modo_reinscripcion_anual:
+            filas_datos = [
+                self.fila(
+                    self.campo(
+                        "periodo",
+                        "Periodo escolar",
+                        lh.listar_periodos() or v.periodos_disponibles(),
+                    ),
+                    self.campo(
+                        "semestre",
+                        "Semestre al que se reinscribe",
+                        ["2", "3", "4", "5", "6"],
+                    ),
+                    pesos=(2, 1),
+                )
+            ]
+            validador_datos = self._validar_datos_reinscripcion
+            titulo_datos = "PERIODO Y SEMESTRE"
+        else:
+            filas_datos = [
                 self.fila(
                     self.campo("periodo", "Periodo (ej. AGO-DIC 2026)", v.periodos_disponibles()),
                     self.selector("tipo_inscripcion", "Tipo de trámite", v.TIPOS_INSCRIPCION),
@@ -50,9 +122,11 @@ class VentanaAltaInscripcion(VentanaAlta):
                     self.campo("semestre", "Semestre", v.SEMESTRES),
                     pesos=(4, 1),
                 ),
-            ],
-            self._validar_datos,
-        )
+            ]
+            validador_datos = self._validar_datos
+            titulo_datos = "DATOS DE LA INSCRIPCIÓN"
+
+        self.agregar_seccion(titulo_datos, filas_datos, validador_datos)
 
         self.agregar_seccion(
             "GRUPO Y HORARIO",
@@ -60,37 +134,128 @@ class VentanaAltaInscripcion(VentanaAlta):
             self._validar_horario,
         )
 
-        self.agregar_seccion(
-            "COMPROBANTES EN PDF",
-            [self.zona_pdf("documentos")],
-            lambda d: v.validar_documentos(
-                d, minimo=1, etiqueta="Comprobantes (pago, horario...)"
-            ),
-        )
+        if not self.modo_reinscripcion_anual:
+            self.agregar_seccion(
+                "COMPROBANTES EN PDF",
+                [self.zona_pdf("documentos")],
+                lambda d: v.validar_documentos(
+                    d, minimo=1, etiqueta="Comprobantes (pago, horario...)"
+                ),
+            )
 
     def _validar_alumno(self, datos):
-        # Acepta cualquier número (solo dígitos) y lo busca como control o como ficha.
-        errores, limpio = v.validar_numero(
-            datos, "ficha", "Número de ficha / control", min_len=1, max_len=20
-        )
-        if errores:
-            return errores, limpio
+        if self.modo_reinscripcion_anual:
+            self._alumno = None
+            self._resumen_alumno.setText(
+                "Ingresa el número de control o el nombre del alumno y valídalo "
+                "para mostrar sus datos."
+            )
 
-        alumno, problema = li.buscar_alumno(limpio["ficha"])
+        etiqueta_control = (
+            "Número de control o nombre"
+            if self.modo_reinscripcion_anual
+            else "Número de ficha / control"
+        )
+        if self.modo_reinscripcion_anual and not str(
+            datos.get("ficha") or ""
+        ).strip().isdecimal():
+            nombre = " ".join(str(datos.get("ficha") or "").split())
+            if len(nombre) < 3 or any(caracter.isdigit() for caracter in nombre):
+                return {
+                    "ficha": "Escribe un número de control o un nombre válido."
+                }, {}
+            limpio = {"ficha": nombre}
+        else:
+            errores, limpio = v.validar_numero(
+                datos, "ficha", etiqueta_control, min_len=1, max_len=20
+            )
+            if errores:
+                return errores, limpio
+
+        alumno, problema = li.buscar_alumno(
+            limpio["ficha"],
+            permitir_nombre=self.modo_reinscripcion_anual,
+        )
         if problema:
             return {"ficha": problema}, {}
         if alumno is None:
-            return {"ficha": "No existe un alumno con ese número de ficha o de control."}, {}
+            return {
+                "ficha": (
+                    "No se encontró un alumno con ese número de control o nombre."
+                    if self.modo_reinscripcion_anual
+                    else "No existe un alumno con ese número de ficha o de control."
+                )
+            }, {}
+
+        if (
+            self.modo_reinscripcion_anual
+            and limpio["ficha"].isdecimal()
+            and str(alumno["numero_control"]) != limpio["ficha"]
+        ):
+            return {
+                "ficha": "Escribe el número de control del alumno."
+            }, {}
 
         self._alumno = alumno
         limpio["numero_control"] = alumno["numero_control"]
         limpio["alumno_nombre"] = alumno["nombre"]
+        if self.modo_reinscripcion_anual:
+            semestre_actual = alumno.get("semestre_actual") or "Sin asignar"
+            turno = (alumno.get("turno") or "Sin asignar").capitalize()
+            self._resumen_alumno.setText(
+                f"Alumno: {alumno['nombre']}  ·  "
+                f"Control: {alumno['numero_control']}  ·  "
+                f"Semestre actual: {semestre_actual}  ·  Turno: {turno}"
+            )
         return {}, limpio
 
     def _validar_datos(self, datos):
         errores, limpio = v.validar_inscripcion(datos)
         if not errores:
             self._cargar_grupos(limpio["periodo"], int(limpio["semestre"]))
+        return errores, limpio
+
+    def _validar_datos_reinscripcion(self, datos):
+        errores, limpio = {}, {}
+        periodo = re.sub(
+            r"\s*-\s*", "-", v.espacios(datos.get("periodo")).upper()
+        )
+        limpio["periodo"] = periodo
+        periodos = lh.listar_periodos()
+        if not periodo:
+            errores["periodo"] = "Periodo: es obligatorio."
+        elif periodo not in periodos:
+            errores["periodo"] = "Periodo: selecciona un periodo registrado."
+
+        mensaje, semestre_texto = v._validar_semestre(datos.get("semestre"))
+        limpio["semestre"] = semestre_texto
+        if mensaje:
+            errores["semestre"] = mensaje
+        elif semestre_texto not in ("2", "3", "4", "5", "6"):
+            errores["semestre"] = (
+                "Este módulo permite reinscripciones a los semestres 2, 3, 4, 5 y 6."
+            )
+        elif self._alumno:
+            try:
+                semestre_actual = int(self._alumno.get("semestre_actual") or 0)
+            except (TypeError, ValueError):
+                semestre_actual = 0
+            semestre_destino = int(semestre_texto)
+            if semestre_actual == 1 and semestre_destino != 2:
+                errores["semestre"] = (
+                    "Si el alumno cursa primer semestre, debe reinscribirse a segundo."
+                )
+            elif semestre_actual and semestre_destino < semestre_actual:
+                errores["semestre"] = (
+                    f"El alumno cursa el semestre {semestre_actual}; "
+                    "no puede reinscribirse a uno menor."
+                )
+        else:
+            errores["ficha"] = "Primero valida el número de control del alumno."
+
+        limpio["tipo_inscripcion"] = "Reinscripción"
+        if not errores:
+            self._cargar_grupos(periodo, int(semestre_texto))
         return errores, limpio
 
     def _selector_horario(self):
@@ -255,8 +420,6 @@ class VentanaAltaInscripcion(VentanaAlta):
         return lineas, "El alumno quedará inscrito en todas las materias del grupo elegido."
 
     def guardar(self, datos):
-        print("DEBUG guardar():", datos)
-
         ok, mensaje = li.registrar_tramite(datos)
         if ok:
             prefijo = "PDF del horario: "
@@ -272,6 +435,11 @@ class VentanaAltaInscripcion(VentanaAlta):
         super().limpiar()
         self._alumno = None
         self._contexto = None
+        if self.modo_reinscripcion_anual:
+            self._resumen_alumno.setText(
+                "Ingresa el número de control o el nombre del alumno y valídalo "
+                "para mostrar sus datos."
+            )
         self.combo_horario.blockSignals(True)
         self.combo_horario.clear()
         self.combo_horario.addItem("Selecciona el grupo y horario", None)

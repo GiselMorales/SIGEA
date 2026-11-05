@@ -4,10 +4,11 @@ from Logica import validaciones as v
 from Logica import alumnos as la
 from Logica.validaciones import turno_por_puntaje, SEMESTRE_INICIAL
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import destinos_barra
+from ventanas.componentes import ORDEN_BARRA_ALUMNOS, destinos_barra
 
 class VentanaAltaAlumno(VentanaAlta):
-    DESTINOS_BARRA = destinos_barra()      # Alta / Baja / Modificar / Consultar desde la barra
+    ORDEN_BARRA = ORDEN_BARRA_ALUMNOS
+    DESTINOS_BARRA = destinos_barra(ORDEN_BARRA)
 
     def __init__(self, menu=None):
         super().__init__("SIGEA - Alta de alumno", "ALTA DE ALUMNO", "REGISTRAR ALUMNO", menu)

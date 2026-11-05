@@ -49,14 +49,37 @@ class VentanaLogin(VentanaBase):
 
         formulario = self.crear_formulario(
             "INICIAR SESIÓN",
-            "Bienvenido(a) al sistema SIGEA.\n"
-            "\nIngresa tu clave personal y contraseña para continuar",
+            "",
             texto_boton=None,
             ancho=410,
             icono=ruta_recurso("iconosesion.png"),
+            color_titulo=Config.AZUL_OSCURO,
+            centrar_titulo=True,
+            familia_fuente_titulo="Segoe UI",
         )
         formulario.agregar_logo(ruta_recurso("logo-ita300.png"), ancho=120, alto=80)
         formulario.agregar_logo(ruta_recurso("Logotecnm300.png"), ancho=120, alto=80)
+        formulario.fila_logos.setAlignment(Qt.AlignVCenter)
+        formulario.fila_logos.setSpacing(0)
+        formulario.fila_logos.insertStretch(1, 1)
+
+        bienvenida = self.crear_label_subtitulo(
+            "Bienvenido(a) al sistema SIGEA",
+            12,
+            "#AEB8C4",
+            wrap=False,
+        )
+        bienvenida.setAlignment(Qt.AlignCenter)
+        formulario.agregar_widget(bienvenida)
+
+        instrucciones = self.crear_label_subtitulo(
+            "Ingresa tu clave personal y contraseña para continuar",
+            12,
+            "#AEB8C4",
+        )
+        instrucciones.setAlignment(Qt.AlignCenter)
+        formulario.agregar_widget(instrucciones)
+
         formulario.agregar_widget(
             self.crear_label_campo("TIPO DE USUARIO", color="rgba(128, 128, 128, 178)")
         )
@@ -74,7 +97,7 @@ class VentanaLogin(VentanaBase):
         self.spinner = self.crear_spinner(22, Config.TEXTO_CLARO)
         self.spinner.setParent(self.boton_login)
         self.spinner.setGeometry(
-            self.boton_login.width() - 35,
+            (self.boton_login.width() - self.spinner.width()) // 2,
             (self.boton_login.height() - 22) // 2,
             22, 22,
         )
@@ -110,8 +133,9 @@ class VentanaLogin(VentanaBase):
 
         self._verificando = True
         self.boton_login.setEnabled(False)
-        self.boton_login.setText("")
+        self.boton_login.set_cargando(True)
         self.spinner.show()
+        self.spinner.raise_()
         self.spinner.iniciar()
 
         self._acceso_id = acceso_id
@@ -125,6 +149,7 @@ class VentanaLogin(VentanaBase):
     def _finalizar_verificacion(self, usuario, tipo_usuario, acceso_id):
         self.spinner.detener()
         self._verificando = False
+        self.boton_login.set_cargando(False)
         self.boton_login.setEnabled(True)
         self.boton_login.setText(TEXTO_BOTON)
 

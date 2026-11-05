@@ -1,9 +1,12 @@
 from Logica import validaciones as v
 from Logica.docentes import registrar_docente 
 from ventanas.base_alta import VentanaAlta
+from ventanas.componentes import ORDEN_BARRA_DOCENTE, destinos_barra_docente
 
 
 class VentanaAltaDocente(VentanaAlta):
+    ORDEN_BARRA = ORDEN_BARRA_DOCENTE
+    DESTINOS_BARRA = destinos_barra_docente()
 
     def __init__(self, menu=None):
         super().__init__("SIGEA - Alta de docente", "ALTA DE DOCENTE", "REGISTRAR DOCENTE", menu)

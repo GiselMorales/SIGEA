@@ -1,9 +1,8 @@
-from PySide6.QtWidgets import QVBoxLayout, QMessageBox
+from PySide6.QtWidgets import QVBoxLayout
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 from ventanas.ventana import VentanaBase
-from conexiondb.db import obtener_conexion
 
 # vista -> consulta, parámetros y textos de la gráfica
 VISTAS = {

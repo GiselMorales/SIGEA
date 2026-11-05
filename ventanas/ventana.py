@@ -15,7 +15,6 @@ from PySide6.QtCore import (
     QEasingCurve,
     QRectF,
     QPointF,
-    QRect,
     QSize,
     QTimer,
     Signal,
@@ -46,7 +45,6 @@ class Config:
     AZUL_MEDIO = "#1D4ED8"
     AZUL_CLARO = "#38BDF8"
     CIAN = "#7AC5FE"
-
     FONDO_VENTANA = "#15477D"
     FONDO_TARJETA = "#FFFFFF"
     FONDO_CAMPO = "#F2F4F7"
@@ -330,6 +328,7 @@ class BotonEntrar(_BotonAnimado):
     def __init__(self, texto="", icono=None, parent=None):
         super().__init__(texto, icono, parent)
         self._brillo = 0.0
+        self._cargando = False
         self._efecto = sombra(self, "#000000", 20, 10, 51)
         self._anim_brillo = QPropertyAnimation(self, b"brillo", self)
         self._anim_brillo.setDuration(1500)
@@ -337,6 +336,13 @@ class BotonEntrar(_BotonAnimado):
         self._anim_brillo.setKeyValueAt(0.0, 0.0)
         self._anim_brillo.setKeyValueAt(0.6, 1.0)
         self._anim_brillo.setKeyValueAt(1.0, 1.0)
+
+    def set_cargando(self, cargando):
+        self._cargando = bool(cargando)
+        if self._cargando:
+            self._anim_brillo.stop()
+            self._brillo = 0.0
+        self.update()
 
     def _get_brillo(self):
         return self._brillo
@@ -385,6 +391,9 @@ class BotonEntrar(_BotonAnimado):
         p.setPen(QPen(QColor(255, 255, 255, int(77 + 76 * t)), 3))
         p.setBrush(Qt.NoBrush)
         p.drawPath(ruta)
+
+        if self._cargando:
+            return
 
         f = fuente(11, True, 0.3)
         p.setFont(f)
@@ -930,9 +939,20 @@ class CampoFlotante(QWidget):
         self.entrada.clear()
 
 class TituloPulso(QWidget):
-    def __init__(self, texto, icono=None, parent=None):
+    def __init__(
+        self,
+        texto,
+        icono=None,
+        parent=None,
+        color=None,
+        centrado=False,
+        familia_fuente=None,
+    ):
         super().__init__(parent)
         self._texto = texto
+        self._color = color or Config.AZUL_FORM
+        self._centrado = centrado
+        self._familia_fuente = familia_fuente
         self._p = 0.0
         self._pixmap = None
 
@@ -967,31 +987,81 @@ class TituloPulso(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
         h = self.height()
-        c = QColor(Config.AZUL_FORM)
+        c = QColor(self._color)
 
-        if self._pixmap is not None:
-            p.drawPixmap(0, (h - self._pixmap.height()) // 2, self._pixmap)
-            x_texto = self._pixmap.width() + 10
-        else:
-            centro = QPointF(10, h / 2)
-            p.setPen(Qt.NoPen)
-            p.setBrush(c)
-            p.drawEllipse(centro, 9, 9)
-            onda = QColor(c)
-            onda.setAlphaF(1 - self._p)
-            p.setBrush(onda)
-            r = 9 * (0.9 + 0.9 * self._p)
-            p.drawEllipse(centro, r, r)
-            x_texto = 32
-
-        p.setFont(fuente(17, True, -1))
+        fuente_titulo = fuente(17, True, -1)
+        if self._familia_fuente:
+            fuente_titulo = QFont(self._familia_fuente)
+            fuente_titulo.setPointSizeF(18)
+            fuente_titulo.setBold(True)
+        p.setFont(fuente_titulo)
         p.setPen(c)
-        p.drawText(QRectF(x_texto, 0, self.width() - x_texto, h), Qt.AlignVCenter | Qt.AlignLeft, self._texto)
+        if self._centrado:
+            ancho_texto = QFontMetrics(fuente_titulo).horizontalAdvance(self._texto)
+            ancho_icono = self._pixmap.width() + 10 if self._pixmap else 32
+            ancho_grupo = ancho_icono + ancho_texto
+            x_grupo = (self.width() - ancho_grupo) / 2
+            if self._pixmap is not None:
+                p.drawPixmap(
+                    int(x_grupo),
+                    (h - self._pixmap.height()) // 2,
+                    self._pixmap,
+                )
+            else:
+                centro = QPointF(x_grupo + 10, h / 2)
+                p.setPen(Qt.NoPen)
+                p.setBrush(c)
+                p.drawEllipse(centro, 9, 9)
+                onda = QColor(c)
+                onda.setAlphaF(1 - self._p)
+                p.setBrush(onda)
+                r = 9 * (0.9 + 0.9 * self._p)
+                p.drawEllipse(centro, r, r)
+            p.setPen(c)
+            rect_texto = QRectF(
+                x_grupo + ancho_icono,
+                0,
+                ancho_texto + 2,
+                h,
+            )
+            alineacion = Qt.AlignVCenter | Qt.AlignLeft
+        else:
+            if self._pixmap is not None:
+                p.drawPixmap(0, (h - self._pixmap.height()) // 2, self._pixmap)
+                x_texto = self._pixmap.width() + 10
+            else:
+                centro = QPointF(10, h / 2)
+                p.setPen(Qt.NoPen)
+                p.setBrush(c)
+                p.drawEllipse(centro, 9, 9)
+                onda = QColor(c)
+                onda.setAlphaF(1 - self._p)
+                p.setBrush(onda)
+                r = 9 * (0.9 + 0.9 * self._p)
+                p.drawEllipse(centro, r, r)
+                x_texto = 32
+            rect_texto = QRectF(x_texto, 0, self.width() - x_texto, h)
+            alineacion = Qt.AlignVCenter | Qt.AlignLeft
+        p.setPen(c)
+        p.drawText(rect_texto, alineacion, self._texto)
         
 class TarjetaFormulario(QFrame):
     enviado = Signal()
 
-    def __init__(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=350, parent=None, icono=None):
+    def __init__(
+        self,
+        titulo,
+        mensaje="",
+        campos=(),
+        texto_boton="Enviar",
+        pie="",
+        ancho=350,
+        parent=None,
+        icono=None,
+        color_titulo=None,
+        centrar_titulo=False,
+        familia_fuente_titulo=None,
+    ):
         super().__init__(parent)
         self.setObjectName("tarjetaFormulario")
         self.setAttribute(Qt.WA_StyledBackground, True)
@@ -1012,7 +1082,15 @@ class TarjetaFormulario(QFrame):
         self.fila_logos.setSpacing(50)
         self._fila_logos_puesta = False
 
-        self._lay.addWidget(TituloPulso(titulo, icono))
+        self._lay.addWidget(
+            TituloPulso(
+                titulo,
+                icono,
+                color=color_titulo,
+                centrado=centrar_titulo,
+                familia_fuente=familia_fuente_titulo,
+            )
+        )
         if mensaje:
             m = QLabel(mensaje)
             m.setWordWrap(True)
@@ -1281,6 +1359,11 @@ class VentanaBase(QWidget):
     # ---------- ventana ----------
     def configurar_ventana(self, titulo, ancho, alto):
         self.setWindowTitle(titulo)
+        self.setWindowFlags(
+            self.windowFlags()
+            | Qt.WindowMinimizeButtonHint
+            | Qt.WindowMaximizeButtonHint
+        )
         self.resize(ancho, alto)
         self.setMinimumSize(750, 550)
         icono = buscar_icono_app()
@@ -1357,8 +1440,32 @@ class VentanaBase(QWidget):
         """)
         return tarjeta
 
-    def crear_formulario(self, titulo, mensaje="", campos=(), texto_boton="Enviar", pie="", ancho=250, icono=None):
-        return TarjetaFormulario(titulo, mensaje, campos, texto_boton, pie, ancho, self, icono)
+    def crear_formulario(
+        self,
+        titulo,
+        mensaje="",
+        campos=(),
+        texto_boton="Enviar",
+        pie="",
+        ancho=250,
+        icono=None,
+        color_titulo=None,
+        centrar_titulo=False,
+        familia_fuente_titulo=None,
+    ):
+        return TarjetaFormulario(
+            titulo,
+            mensaje,
+            campos,
+            texto_boton,
+            pie,
+            ancho,
+            self,
+            icono,
+            color_titulo,
+            centrar_titulo,
+            familia_fuente_titulo,
+        )
 
     def crear_cabecera_menu(self, titulo, icono=None, boton=None):
         """Fila superior del menú: icono + título a la izquierda y un botón (Salir) a la derecha."""
@@ -1466,11 +1573,17 @@ class VentanaBase(QWidget):
         layout.addSpacing(35)
 
         layout.addWidget(self.crear_label_titulo(titulo, Config.FONT_LOGO, Config.TEXTO_CLARO))
-        layout.addWidget(self.crear_label_subtitulo(subtitulo, 13, Config.CIAN, wrap=False))
+        layout.addWidget(
+            self.crear_label_subtitulo(
+                subtitulo, 13, Config.CIAN, wrap=False
+            )
+        )
 
         linea = QFrame()
         linea.setFixedSize(70, 3)
-        linea.setStyleSheet(f"QFrame {{ background-color: {Config.CIAN}; border-radius: 1px; }}")
+        linea.setStyleSheet(
+            f"QFrame {{ background-color: {Config.CIAN}; border-radius: 1px; }}"
+        )
         layout.addSpacing(22)
         layout.addWidget(linea)
         layout.addStretch()

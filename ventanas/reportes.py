@@ -10,7 +10,9 @@ from Logica import validaciones as v
 from Logica import horarios as lh
 from reportes.generador_pdf import generar_pdf_horario, generar_pdf_lista_grupo
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import ESTILO_COMBO_TIPO
+from ventanas.componentes import (
+    ESTILO_COMBO_TIPO, ORDEN_BARRA_REPORTES, destinos_barra_reportes,
+)
 
 # Los PDF se guardan en <proyecto>/reportes_generados
 CARPETA_SALIDA = Path(__file__).resolve().parent.parent / "reportes_generados"
@@ -22,6 +24,8 @@ class _VentanaReporte(VentanaAlta):
 
     PIDE_MATERIA = False
     PIDE_GRUPO = True
+    ORDEN_BARRA = ORDEN_BARRA_REPORTES
+    DESTINOS_BARRA = destinos_barra_reportes()
 
     def __init__(self, titulo_ventana, titulo, menu=None):
         super().__init__(titulo_ventana, titulo, "GENERAR PDF", menu)
@@ -78,7 +82,7 @@ class _VentanaReporte(VentanaAlta):
         if not periodo:
             errores["periodo"] = "Periodo: es obligatorio."
         elif periodo not in lh.listar_periodos():
-            errores["periodo"] = "Periodo: no está dado de alta en periodos_escolares."
+            errores["periodo"] = "El periodo seleccionado no está disponible."
 
         msg, semestre = v._validar_semestre(datos.get("semestre"))
         limpio["semestre"] = semestre
@@ -146,6 +150,8 @@ class _VentanaReporte(VentanaAlta):
 
 
 class VentanaReporteHorarios(_VentanaReporte):
+    INDICE_BARRA = 1
+
     def __init__(self, menu=None):
         super().__init__("SIGEA - Reporte de horarios", "REPORTE DE HORARIOS", menu)
 
@@ -170,6 +176,7 @@ class VentanaReporteHorarios(_VentanaReporte):
 
 class VentanaReporteListaGrupo(_VentanaReporte):
     PIDE_MATERIA = True
+    INDICE_BARRA = 2
 
     def __init__(self, menu=None):
         super().__init__("SIGEA - Lista de grupo", "LISTA DE GRUPO", menu)

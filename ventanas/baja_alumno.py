@@ -1,12 +1,13 @@
 from Logica import validaciones as v
 from Logica import gestion_alumnos as ga
 from ventanas.base_alta import VentanaAlta
-from ventanas.componentes import destinos_barra
+from ventanas.componentes import ORDEN_BARRA_ALUMNOS, destinos_barra
 
 
 class VentanaBajaAlumno(VentanaAlta):
-    INDICE_BARRA = 2                       # «Baja»
-    DESTINOS_BARRA = destinos_barra()
+    ORDEN_BARRA = ORDEN_BARRA_ALUMNOS
+    INDICE_BARRA = 3                       # «Baja»
+    DESTINOS_BARRA = destinos_barra(ORDEN_BARRA)
     PREGUNTA_CONFIRMACION = "¿Seguro que deseas dar de baja a este alumno?"
     TEXTO_SI = "Sí, dar de baja"
 

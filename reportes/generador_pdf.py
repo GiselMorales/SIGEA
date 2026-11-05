@@ -1,5 +1,5 @@
 # reportes/generador_pdf.py
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
 

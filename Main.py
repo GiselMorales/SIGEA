@@ -10,4 +10,3 @@ ventana = VentanaLogin()
 ventana.show()
 
 sys.exit(app.exec())
-

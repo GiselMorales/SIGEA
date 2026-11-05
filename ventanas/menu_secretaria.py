@@ -13,6 +13,7 @@ from ventanas.consulta_secretarias import VentanaConsultaSecretarias
 from ventanas.consulta_horarios import VentanaConsultaHorarios
 from ventanas.bitacora_secretarias import VentanaBitacoraSecretarias
 from ventanas.inscripciones import VentanaAltaInscripcion
+from ventanas.reinscripcion_anual import VentanaReinscripcionAnual
 from ventanas.consulta_alumnos import VentanaConsultaAlumnos
 from ventanas.baja_alumno import VentanaBajaAlumno
 from ventanas.modificar_alumno import VentanaModificarAlumno
@@ -26,13 +27,10 @@ from ventanas.grafica_alumnos import VentanaGrafica
 ICONOS_ALUMNOS = {
     "ALUMNOS/Consultas": "consulta-icono.png",
     "ALUMNOS/Inscripciones": "inscripcion-icono.png",
-    "ALUMNOS/Inscripciones/Alta de alumno": "altaalumno-icono.png",
-    "ALUMNOS/Inscripciones/Baja de alumno": "baja-icono.png",
-    "ALUMNOS/Inscripciones/Modificaciones": "modificar-icono.png",
+    "ALUMNOS/Alta de alumno": "altaalumno-icono.png",
+    "ALUMNOS/Baja": "baja-icono.png",
+    "ALUMNOS/Modificaciones": "modificar-icono.png",
     "ALUMNOS/Reinscripciones": "reinscripciones.png",
-    "ALUMNOS/Reinscripciones/Alta de alumno": "altaalumno-icono.png",
-    "ALUMNOS/Reinscripciones/Baja de alumno": "baja-icono.png",
-    "ALUMNOS/Reinscripciones/Modificaciones": "modificar-icono.png",
     "ALUMNOS/Constancias": "archivo-pdf.png",
 }
 ICONOS_DOCENTE = {
@@ -71,13 +69,11 @@ class VentanaMenuAdmin(VentanaBase):
 
         self.acciones = {
             "ALUMNOS/Consultas": lambda: self._abrir(VentanaConsultaAlumnos),
-            "ALUMNOS/Inscripciones/Alta de alumno": lambda: self._abrir(VentanaAltaAlumno),
-            "ALUMNOS/Inscripciones/Baja de alumno": lambda: self._abrir(VentanaBajaAlumno),
-            "ALUMNOS/Inscripciones/Modificaciones": lambda: self._abrir(VentanaModificarAlumno),
             "ALUMNOS/Inscripciones": lambda: self._abrir(VentanaAltaInscripcion),
-            "ALUMNOS/Reinscripciones": lambda: self._abrir(VentanaAltaInscripcion),
-            "ALUMNOS/Reinscripciones/Baja de alumno": lambda: self._abrir(VentanaBajaAlumno),
-            "ALUMNOS/Reinscripciones/Modificaciones": lambda: self._abrir(VentanaModificarAlumno),
+            "ALUMNOS/Alta de alumno": lambda: self._abrir(VentanaAltaAlumno),
+            "ALUMNOS/Baja": lambda: self._abrir(VentanaBajaAlumno),
+            "ALUMNOS/Modificaciones": lambda: self._abrir(VentanaModificarAlumno),
+            "ALUMNOS/Reinscripciones": lambda: self._abrir(VentanaReinscripcionAnual),
             "DOCENTE/Alta de docente": lambda: self._abrir(VentanaAltaDocente),
             "SECRETARIA/Alta de secretaria": lambda: self._abrir(VentanaAltaSecretaria),
             "SECRETARIA/Baja de secretaria": lambda: self._abrir(VentanaBajaSecretaria),
@@ -140,9 +136,12 @@ class VentanaMenuAdmin(VentanaBase):
             self.crear_tarjeta_menu(
                 "ALUMNOS",
                 [
+                    "Alta de alumno",
+                    "Modificaciones",
+                    "Baja",
+                    "Inscripciones",
+                    "Reinscripciones",
                     "Consultas",
-                    ("Inscripciones", ["Alta de alumno", "Baja de alumno", "Modificaciones"]),
-                    ("Reinscripciones", ["Alta de alumno", "Baja de alumno", "Modificaciones"]),
                     "Constancias",
                 ],
                 ruta_recurso("alumnos.png"),
