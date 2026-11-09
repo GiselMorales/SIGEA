@@ -13,7 +13,7 @@ from ventanas.consulta_secretarias import VentanaConsultaSecretarias
 from ventanas.consulta_horarios import VentanaConsultaHorarios
 from ventanas.bitacora_secretarias import VentanaBitacoraSecretarias
 from ventanas.inscripciones import VentanaAltaInscripcion
-from ventanas.reinscripcion_anual import VentanaReinscripcionAnual
+from ventanas.modulo_reinscripcion import VentanaModuloReinscripcion
 from ventanas.consulta_alumnos import VentanaConsultaAlumnos
 from ventanas.baja_alumno import VentanaBajaAlumno
 from ventanas.modificar_alumno import VentanaModificarAlumno
@@ -73,7 +73,9 @@ class VentanaMenuAdmin(VentanaBase):
             "ALUMNOS/Alta de alumno": lambda: self._abrir(VentanaAltaAlumno),
             "ALUMNOS/Baja": lambda: self._abrir(VentanaBajaAlumno),
             "ALUMNOS/Modificaciones": lambda: self._abrir(VentanaModificarAlumno),
-            "ALUMNOS/Reinscripciones": lambda: self._abrir(VentanaReinscripcionAnual),
+            "ALUMNOS/Reinscripciones": lambda: self._abrir(
+                VentanaModuloReinscripcion
+            ),
             "DOCENTE/Alta de docente": lambda: self._abrir(VentanaAltaDocente),
             "SECRETARIA/Alta de secretaria": lambda: self._abrir(VentanaAltaSecretaria),
             "SECRETARIA/Baja de secretaria": lambda: self._abrir(VentanaBajaSecretaria),

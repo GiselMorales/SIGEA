@@ -232,6 +232,164 @@ def _hora(valor):
     return valor.strftime("%H:%M") if hasattr(valor, "strftime") else str(valor)
 
 
+def generar_pdf_horario_reinscripcion(datos, ruta_salida):
+    """Genera el horario de reinscripción en una cuadrícula semanal."""
+    Path(ruta_salida).parent.mkdir(parents=True, exist_ok=True)
+
+    pagina = landscape(letter)
+    margen = 30
+    ancho_util = pagina[0] - 2 * margen
+    nombre = datos["alumno_nombre"]
+    titulo = f"HORARIO DE REINSCRIPCIÓN · {nombre}"
+    doc = SimpleDocTemplate(
+        str(ruta_salida),
+        pagesize=pagina,
+        rightMargin=margen,
+        leftMargin=margen,
+        topMargin=30,
+        bottomMargin=36,
+        title=titulo,
+    )
+    styles = getSampleStyleSheet()
+    story = [_membrete(styles, ancho_util), Spacer(1, 10)]
+    story.append(
+        Paragraph(
+            _texto(titulo),
+            ParagraphStyle(
+                "HorarioReinscripcionTitulo",
+                fontName="Helvetica-Bold",
+                fontSize=14,
+                alignment=1,
+                textColor=colors.HexColor("#1B396A"),
+            ),
+        )
+    )
+    story.append(Spacer(1, 6))
+
+    info = ParagraphStyle(
+        "HorarioReinscripcionInfo",
+        fontName="Helvetica",
+        fontSize=9,
+        leading=12,
+        alignment=1,
+        textColor=colors.HexColor("#333333"),
+    )
+    story.append(
+        Paragraph(
+            f"<b>No. de control:</b> {_texto(datos['numero_control'])} &nbsp;&nbsp; "
+            f"<b>Semestre:</b> {_texto(datos['semestre'])} &nbsp;&nbsp; "
+            f"<b>Turno:</b> {_texto(str(datos['turno']).capitalize())}<br/>"
+            f"<b>Correo institucional:</b> {_texto(datos['correo'])} &nbsp;&nbsp; "
+            f"<b>Emitido:</b> {datetime.now():%d/%m/%Y %H:%M}",
+            info,
+        )
+    )
+    story.append(Spacer(1, 12))
+
+    materias = datos["materias"]
+    franjas = sorted(
+        {
+            (bloque[1], bloque[2])
+            for materia in materias
+            for bloque in materia["bloques"]
+            if bloque[0] in DIAS_ORDEN[:5]
+        }
+    )
+    celda = ParagraphStyle(
+        "HorarioReinscripcionCelda",
+        fontName="Helvetica",
+        fontSize=8,
+        leading=10,
+        alignment=1,
+    )
+    cabecera = ParagraphStyle(
+        "HorarioReinscripcionCabecera",
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        leading=11,
+        alignment=1,
+        textColor=colors.white,
+    )
+    dias = DIAS_ORDEN[:5]
+    filas = [
+        [Paragraph("Hora", cabecera)]
+        + [Paragraph(dia.capitalize(), cabecera) for dia in dias]
+    ]
+    fondos = []
+    for fila, (inicio, fin) in enumerate(franjas, start=1):
+        celdas = [
+            Paragraph(
+                f"<b>{_hora(inicio)} - {_hora(fin)}</b>",
+                celda,
+            )
+        ]
+        for columna, dia in enumerate(dias, start=1):
+            clases = []
+            for indice, materia in enumerate(materias):
+                for dia_bloque, inicio_bloque, fin_bloque, aula in materia[
+                    "bloques"
+                ]:
+                    if (
+                        dia_bloque == dia
+                        and inicio_bloque == inicio
+                        and fin_bloque == fin
+                    ):
+                        clases.append(
+                            (
+                                materia,
+                                aula,
+                                PASTELES[indice % len(PASTELES)],
+                            )
+                        )
+            texto = "<br/><br/>".join(
+                f"<b>{_texto(materia['materia'])}</b><br/>"
+                f"Grupo {_texto(materia['grupo'])}<br/>"
+                f"Aula {_texto(aula or 'Sin aula')}"
+                for materia, aula, _ in clases
+            )
+            celdas.append(Paragraph(texto, celda))
+            if clases:
+                fondos.append(
+                    (
+                        "BACKGROUND",
+                        (columna, fila),
+                        (columna, fila),
+                        colors.HexColor(clases[0][2]),
+                    )
+                )
+        filas.append(celdas)
+
+    ancho_hora = 82
+    ancho_dia = (ancho_util - ancho_hora) / len(dias)
+    tabla = Table(
+        filas,
+        colWidths=[ancho_hora] + [ancho_dia] * len(dias),
+        repeatRows=1,
+    )
+    tabla.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), AZUL),
+                (
+                    "GRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.4,
+                    colors.HexColor("#9FB3CF"),
+                ),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+            + fondos
+        )
+    )
+    story.append(tabla)
+    pie = _hacer_pie(pagina, margen)
+    doc.build(story, onFirstPage=pie, onLaterPages=pie)
+    return str(ruta_salida)
+
+
 def generar_pdf_horario(datos, ruta_salida):
     """PDF horizontal con la cuadrícula semanal del grupo y el detalle de sus materias.
     datos: {periodo, semestre, turno, clave, materias:[{clave, nombre, creditos, docente,

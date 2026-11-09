@@ -123,7 +123,7 @@ class VentanaLogin(VentanaBase):
         contrasena = self.campo_password.valor()
         tipo_usuario = self.selector_tipo.obtener_seleccion()
 
-        correcto, mensaje, acceso_id = autenticar(
+        correcto, mensaje, acceso_id, usuario_id = autenticar(
             usuario, contrasena, tipo_usuario
         )
 
@@ -142,11 +142,13 @@ class VentanaLogin(VentanaBase):
         QTimer.singleShot(
             1200,
             lambda: self._finalizar_verificacion(
-                usuario, tipo_usuario, acceso_id
+                usuario, tipo_usuario, acceso_id, usuario_id
             ),
         )
 
-    def _finalizar_verificacion(self, usuario, tipo_usuario, acceso_id):
+    def _finalizar_verificacion(
+        self, usuario, tipo_usuario, acceso_id, usuario_id
+    ):
         self.spinner.detener()
         self._verificando = False
         self.boton_login.set_cargando(False)
@@ -159,7 +161,14 @@ class VentanaLogin(VentanaBase):
             self.ventana_menu.show()
             self.close()
         else:
-            self.mostrar_mensaje("SIGEA", f"Bienvenido(a), {usuario}. Acceso como docente.")
+            from ventanas.menu_docente import VentanaMenuDocente
+
+            self.ventana_menu = VentanaMenuDocente(
+                usuario, usuario_id, acceso_id
+            )
+            self._acceso_id = None
+            self.ventana_menu.show()
+            self.close()
 
     def closeEvent(self, evento):
         if self._acceso_id is not None:

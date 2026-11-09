@@ -36,20 +36,20 @@ def autenticar(usuario, contrasena, tipo_usuario):
     global _intentos_fallidos
 
     if limite_superado():
-        return False, MENSAJE_LIMITE, None
+        return False, MENSAJE_LIMITE, None, None
 
     usuario = (usuario or "").strip()
     rol_esperado = ROLES.get(tipo_usuario)
 
     if not usuario or not contrasena:
-        return False, "Ingresa tu usuario y contraseña.", None
+        return False, "Ingresa tu usuario y contraseña.", None, None
 
     if rol_esperado is None:
-        return False, "Selecciona un tipo de usuario válido.", None
+        return False, "Selecciona un tipo de usuario válido.", None, None
 
     conexion = obtener_conexion()
     if conexion is None:
-        return False, "No fue posible conectar con la base de datos.", None
+        return False, "No fue posible conectar con la base de datos.", None, None
 
     acceso_id = None
     try:
@@ -66,12 +66,12 @@ def autenticar(usuario, contrasena, tipo_usuario):
 
         if registro is None:
             correcto, mensaje = _fallo("Usuario o contraseña incorrectos.")
-            return correcto, mensaje, None
+            return correcto, mensaje, None, None
 
         usuario_id, contrasena_guardada, rol_guardado, activo = registro
 
         if not activo:
-            return False, "La cuenta está desactivada.", None
+            return False, "La cuenta está desactivada.", None, None
 
         # comparación en tiempo constante
         if not hmac.compare_digest(
@@ -79,13 +79,13 @@ def autenticar(usuario, contrasena, tipo_usuario):
             (contrasena_guardada or "").encode("utf-8"),
         ):
             correcto, mensaje = _fallo("Usuario o contraseña incorrectos.")
-            return correcto, mensaje, None
+            return correcto, mensaje, None, None
 
         if (rol_guardado or "").lower() != rol_esperado:
             correcto, mensaje = _fallo(
                 "El tipo de usuario seleccionado no corresponde a esta cuenta."
             )
-            return correcto, mensaje, None
+            return correcto, mensaje, None, None
 
         if usuario.casefold() != "admin":
             try:
@@ -99,13 +99,13 @@ def autenticar(usuario, contrasena, tipo_usuario):
                 return False, (
                     "No se pudo registrar tu acceso. Verifica que la bitácora "
                     "de accesos esté instalada en Supabase."
-                ), None
+                ), None, None
 
         _intentos_fallidos = 0
-        return True, f"Bienvenido(a), {usuario}.", acceso_id
+        return True, f"Bienvenido(a), {usuario}.", acceso_id, usuario_id
 
     except psycopg.Error as error:
         print(f"Error en autenticar: {error}")
-        return False, "Ocurrió un error al consultar la base de datos.", None
+        return False, "Ocurrió un error al consultar la base de datos.", None, None
     finally:
         conexion.close()
