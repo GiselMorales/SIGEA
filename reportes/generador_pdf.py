@@ -344,6 +344,7 @@ def generar_pdf_horario_reinscripcion(datos, ruta_salida):
             texto = "<br/><br/>".join(
                 f"<b>{_texto(materia['materia'])}</b><br/>"
                 f"Grupo {_texto(materia['grupo'])}<br/>"
+                f"Docente {_texto(materia.get('docente') or 'Sin docente')}<br/>"
                 f"Aula {_texto(aula or 'Sin aula')}"
                 for materia, aula, _ in clases
             )

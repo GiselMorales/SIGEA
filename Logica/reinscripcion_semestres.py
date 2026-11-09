@@ -37,11 +37,15 @@ def _validar_nombre(valor, etiqueta, obligatorio=True):
         if obligatorio:
             return None, f"{etiqueta} es obligatorio."
         return "", None
+    if len(nombre) < 3:
+        return None, f"{etiqueta} debe contener al menos 3 caracteres."
     if len(nombre) > 80 or not v.RE_NOMBRE.fullmatch(nombre):
         return None, (
             f"{etiqueta} debe contener solo letras, espacios, apóstrofes "
             "o guiones y tener máximo 80 caracteres."
         )
+    if re.search(r"(.)\1{2}", nombre, re.IGNORECASE):
+        return None, f"{etiqueta} no puede repetir una letra 3 veces seguidas."
     return nombre, None
 
 
@@ -82,6 +86,67 @@ def consultar_reinscripcion(numero_control):
     except psycopg.Error as error:
         print(f"Error al consultar reinscripción existente: {error}")
         return None, "No se pudo validar el número de control."
+    finally:
+        conexion.close()
+
+
+def consultar_reinscripciones(filtro=""):
+    filtro = (filtro or "").strip()
+    patron = f"%{filtro}%"
+    conexion = obtener_conexion()
+    if conexion is None:
+        return None, "No fue posible conectar con la base de datos."
+    try:
+        with conexion.cursor() as cursor:
+            cursor.execute(
+                """
+                WITH reinscritos AS (
+                    SELECT numero_control, apellido_paterno, apellido_materno,
+                           nombres, semestre, turno, correo_institucional,
+                           fecha_registro
+                    FROM public.reinscripcion_segundo
+                    UNION ALL
+                    SELECT numero_control, apellido_paterno, apellido_materno,
+                           nombres, semestre, turno, correo_institucional,
+                           fecha_registro
+                    FROM public.reinscripcion_tercero
+                )
+                SELECT numero_control,
+                       CONCAT_WS(
+                           ' ',
+                           apellido_paterno,
+                           NULLIF(apellido_materno, ''),
+                           nombres
+                       ) AS nombre_completo,
+                       semestre, turno, correo_institucional, fecha_registro
+                FROM reinscritos
+                WHERE %s = ''
+                   OR numero_control ILIKE %s
+                   OR CONCAT_WS(
+                       ' ',
+                       apellido_paterno,
+                       NULLIF(apellido_materno, ''),
+                       nombres
+                   ) ILIKE %s
+                ORDER BY fecha_registro DESC, apellido_paterno, nombres
+                """,
+                (filtro, patron, patron),
+            )
+            filas = cursor.fetchall()
+        return [
+            {
+                "numero_control": fila[0],
+                "nombre": fila[1],
+                "semestre": fila[2],
+                "turno": fila[3],
+                "correo": fila[4],
+                "fecha_registro": fila[5],
+            }
+            for fila in filas
+        ], None
+    except psycopg.Error as error:
+        print(f"Error al consultar reinscripciones: {error}")
+        return None, "No se pudieron consultar los alumnos reinscritos."
     finally:
         conexion.close()
 
@@ -161,12 +226,15 @@ def consultar_horario(semestre, turno):
                       {filtro_clave_disponible}
                 )
                 SELECT g.grupo_id, g.clave_grupo, m.clave, m.nombre,
-                       m.semestre, h.dia_semana,
+                       m.semestre, d.apellido_paterno,
+                       COALESCE(d.apellido_materno, ''), d.nombres,
+                       h.dia_semana,
                        h.hora_inicio, h.hora_fin,
                        COALESCE(h.aula, g.aula, '')
                 FROM public.grupos AS g
                 JOIN public.materias AS m ON m.materia_id = g.materia_id
                 JOIN periodo_disponible AS p ON p.periodo_id = g.periodo_id
+                LEFT JOIN public.docentes AS d ON d.rfc = g.docente_rfc
                 LEFT JOIN public.horarios AS h ON h.grupo_id = g.grupo_id
                 WHERE g.activo
                   AND m.semestre = %s
@@ -199,12 +267,15 @@ def consultar_horario(semestre, turno):
                     "clave": fila[2],
                     "materia": fila[3],
                     "semestre": fila[4],
+                    "docente": " ".join(
+                        parte for parte in fila[5:8] if parte
+                    ),
                     "bloques": [],
                 },
             )
-            if fila[5] is not None:
+            if fila[8] is not None:
                 materia["bloques"].append(
-                    (fila[5], fila[6], fila[7], fila[8] or "")
+                    (fila[8], fila[9], fila[10], fila[11] or "")
                 )
 
         return {

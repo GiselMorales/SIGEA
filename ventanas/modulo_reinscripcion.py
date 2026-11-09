@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QMessageBox,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -20,6 +22,7 @@ from reportlab.platypus.doctemplate import LayoutError
 from Logica.reinscripcion_semestres import (
     consultar_horario,
     consultar_reinscripcion,
+    consultar_reinscripciones,
     correo_institucional,
     listar_horarios_semestre,
     registrar_reinscripcion,
@@ -138,6 +141,12 @@ class VentanaModuloReinscripcion(VentanaBase):
 
         acciones = QHBoxLayout()
         acciones.addStretch()
+        self.boton_consultar = self.crear_boton_secundario(
+            "Consultar reinscripciones",
+            self._abrir_consulta_reinscripciones,
+            ancho=245,
+            alto=44,
+        )
         self.boton_limpiar = self.crear_boton_secundario(
             "Limpiar formulario", self._limpiar_formulario, ancho=190, alto=44
         )
@@ -147,6 +156,7 @@ class VentanaModuloReinscripcion(VentanaBase):
             ancho=260,
             alto=48,
         )
+        acciones.addWidget(self.boton_consultar)
         acciones.addWidget(self.boton_limpiar)
         acciones.addWidget(self.boton_registrar)
         grid.addLayout(acciones, 3, 0, 1, 3)
@@ -507,6 +517,143 @@ class VentanaModuloReinscripcion(VentanaBase):
         self.campo_materno.clear()
         self.campo_nombres.clear()
         self.campo_control.setFocus()
+
+    def _abrir_consulta_reinscripciones(self):
+        dialogo = QDialog(self)
+        dialogo.setWindowTitle("Consulta de reinscripciones")
+        dialogo.resize(1000, 560)
+        dialogo.setStyleSheet(
+            f"background: {Config.FONDO_VENTANA}; color: {Config.TEXTO_OSCURO};"
+        )
+        layout = QVBoxLayout(dialogo)
+        layout.setContentsMargins(22, 18, 22, 20)
+        layout.setSpacing(12)
+        layout.addWidget(
+            self.crear_label_titulo("ALUMNOS REINSCRITOS", 20)
+        )
+
+        controles = QHBoxLayout()
+        campo_busqueda = self.crear_campo_texto(
+            "Buscar por número de control o nombre"
+        )
+        boton_buscar = self.crear_boton(
+            "Buscar",
+            lambda: self._cargar_consulta_reinscripciones(
+                lista, estado, campo_busqueda.text()
+            ),
+            ancho=120,
+            alto=40,
+        )
+        controles.addWidget(campo_busqueda, 1)
+        controles.addWidget(boton_buscar)
+        layout.addLayout(controles)
+        campo_busqueda.returnPressed.connect(boton_buscar.click)
+
+        estado = QLabel()
+        estado.setWordWrap(True)
+        estado.setStyleSheet(
+            f"color: {Config.TEXTO_CLARO}; background: transparent;"
+        )
+        layout.addWidget(estado)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        contenido = QFrame()
+        contenido.setStyleSheet("QFrame { background: transparent; }")
+        lista = QVBoxLayout(contenido)
+        lista.setContentsMargins(2, 2, 8, 2)
+        lista.setSpacing(10)
+        scroll.setWidget(contenido)
+        layout.addWidget(scroll, 1)
+
+        self._cargar_consulta_reinscripciones(lista, estado)
+        dialogo.exec()
+
+    def _cargar_consulta_reinscripciones(
+        self, lista, estado, filtro=""
+    ):
+        filas, problema = consultar_reinscripciones(filtro)
+        while lista.count():
+            item = lista.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if problema:
+            estado.setText(problema)
+            QMessageBox.warning(
+                estado.window(), "Consulta de reinscripciones", problema
+            )
+            return
+
+        if not filas:
+            vacio = QLabel(
+                "No se encontraron reinscripciones con ese criterio."
+            )
+            vacio.setAlignment(Qt.AlignCenter)
+            vacio.setWordWrap(True)
+            vacio.setStyleSheet(
+                f"color: {Config.TEXTO_CLARO}; background: transparent; "
+                "font-size: 13px;"
+            )
+            lista.addStretch()
+            lista.addWidget(vacio)
+            lista.addStretch()
+        else:
+            for reinscrito in filas:
+                lista.addWidget(self._tarjeta_reinscripcion(reinscrito))
+            lista.addStretch()
+
+        estado.setText(
+            f"{len(filas)} reinscripción(es) encontrada(s)."
+            if filas
+            else ""
+        )
+
+    @staticmethod
+    def _tarjeta_reinscripcion(reinscrito):
+        tarjeta = QFrame()
+        tarjeta.setObjectName("resultadoReinscripcion")
+        tarjeta.setAttribute(Qt.WA_StyledBackground, True)
+        tarjeta.setMinimumHeight(84)
+        tarjeta.setStyleSheet(
+            "#resultadoReinscripcion { "
+            "background-color: #FFFFFF; border-radius: 12px; }"
+        )
+        layout = QVBoxLayout(tarjeta)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(3)
+
+        nombre = QLabel(reinscrito["nombre"])
+        nombre.setStyleSheet(
+            f"color: {Config.TEXTO_OSCURO}; font-size: 13px; "
+            "font-weight: bold; background: transparent;"
+        )
+        fecha = reinscrito["fecha_registro"]
+        fecha_texto = (
+            fecha.strftime("%d/%m/%Y %H:%M") if fecha else "Sin fecha"
+        )
+        detalle = QLabel(
+            f"No. de control: {reinscrito['numero_control']}  •  "
+            f"Semestre {reinscrito['semestre']}°  •  "
+            f"Turno {reinscrito['turno'].capitalize()}"
+        )
+        contacto = QLabel(
+            f"{reinscrito['correo']}  •  Registro: {fecha_texto}"
+        )
+        for etiqueta in (detalle, contacto):
+            etiqueta.setWordWrap(True)
+            etiqueta.setStyleSheet(
+                f"color: {Config.TEXTO_SUBTITULO}; font-size: 11px; "
+                "background: transparent;"
+            )
+        layout.addWidget(nombre)
+        layout.addWidget(detalle)
+        layout.addWidget(contacto)
+        return tarjeta
 
     def _generar_pdf(self):
         self._guardar_pdf()
