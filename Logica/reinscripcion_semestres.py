@@ -14,8 +14,8 @@ CORREO_INSTITUCIONAL = "l{numero_control}@acapulco.tecnm.mx"
 
 def validar_numero_control(numero_control, semestre):
     numero_control = (numero_control or "").strip()
-    if not re.fullmatch(r"\d{9}", numero_control):
-        return False, "El número de control debe contener 9 dígitos."
+    if not re.fullmatch(r"\d{8}", numero_control):
+        return False, "El número de control debe contener 8 dígitos."
     if semestre not in PREFIJOS_SEMESTRE:
         return False, "Selecciona segundo o tercer semestre."
     if not numero_control.startswith(PREFIJOS_SEMESTRE[semestre]):

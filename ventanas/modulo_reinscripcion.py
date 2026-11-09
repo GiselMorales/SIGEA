@@ -82,14 +82,14 @@ class VentanaModuloReinscripcion(VentanaBase):
         grid.setVerticalSpacing(9)
 
         self.campo_control = self.crear_campo_texto(
-            "Número de control (9 dígitos)"
+            "Número de control (8 dígitos)"
         )
-        self.campo_control.setMaxLength(9)
+        self.campo_control.setMaxLength(8)
         self.campo_control.textChanged.connect(self._cambio_control)
         self.boton_validar = self.crear_boton(
-            "Validar número de control",
+            "Validar",
             self._validar_control_usuario,
-            ancho=245,
+            ancho=290,
             alto=42,
         )
         control_fila = QHBoxLayout()
@@ -168,7 +168,7 @@ class VentanaModuloReinscripcion(VentanaBase):
         )
         encabezado_horario.addStretch()
         self.boton_pdf = self.crear_boton_secundario(
-            "Generar", self._generar_pdf, ancho=130, alto=42
+            "Generar", self._generar_pdf, ancho=160, alto=42
         )
         encabezado_horario.addWidget(self.boton_pdf)
         raiz.addLayout(encabezado_horario)
