@@ -173,16 +173,13 @@ def _filas_alumnos(cursor, grupo_id):
         """
         SELECT ag.alumno_grupo_id, a.numero_control,
                a.nombres, a.apellido_paterno, a.apellido_materno,
-               c1.calificacion, c2.calificacion, c3.calificacion
+               c.evaluacion1, c.evaluacion2, c.evaluacion3,
+               c.promediofinal
         FROM public.alumno_grupo AS ag
         JOIN public.alumnos AS a
             ON a.numero_control = ag.numero_control
-        LEFT JOIN public.calificaciones AS c1
-            ON c1.alumno_grupo_id = ag.alumno_grupo_id AND c1.unidad = 1
-        LEFT JOIN public.calificaciones AS c2
-            ON c2.alumno_grupo_id = ag.alumno_grupo_id AND c2.unidad = 2
-        LEFT JOIN public.calificaciones AS c3
-            ON c3.alumno_grupo_id = ag.alumno_grupo_id AND c3.unidad = 3
+        LEFT JOIN public.calificaciones AS c
+            ON c.alumno_grupo_id = ag.alumno_grupo_id
         WHERE ag.grupo_id = %s
           AND ag.estado = 'inscrito'
           AND a.estado_alumno <> 'baja'
@@ -197,16 +194,37 @@ def _filas_alumnos(cursor, grupo_id):
             "control": fila[1],
             "nombre": _nombre_completo(fila[2], fila[3], fila[4]),
             "evaluaciones": (fila[5], fila[6], fila[7]),
+            "final_guardado": fila[8],
         })
     return alumnos
+
+
+def _guardar_valor_calificacion(cursor, alumno_grupo_id, columna, valor):
+    cursor.execute(
+        f"""
+        UPDATE public.calificaciones
+        SET {columna} = %s
+        WHERE alumno_grupo_id = %s
+        """,
+        (valor, alumno_grupo_id),
+    )
+    if cursor.rowcount == 0:
+        cursor.execute(
+            f"""
+            INSERT INTO public.calificaciones (alumno_grupo_id, {columna})
+            VALUES (%s, %s)
+            """,
+            (alumno_grupo_id, valor),
+        )
 
 
 def _promedio_final(evaluaciones):
     if any(valor is None for valor in evaluaciones):
         return None
-    promedio = sum(
-        (Decimal(valor) for valor in evaluaciones), Decimal(0)
-    ) / 3
+    calificaciones = tuple(Decimal(valor) for valor in evaluaciones)
+    if any(valor == 0 for valor in calificaciones):
+        return Decimal("0.00")
+    promedio = sum(calificaciones, Decimal(0)) / 3
     return promedio.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
 
 
@@ -220,19 +238,24 @@ def _estado_evaluaciones(grupo, alumnos, hoy=None):
         for unidad in (1, 2, 3)
     }
     disponibles = {}
-    for unidad, semana_apertura in SEMANA_UNIDAD.items():
-        anteriores_completas = all(completo[n] for n in range(1, unidad))
+    for unidad in SEMANA_UNIDAD:
+        anteriores_completas = all(
+            completo[previa] for previa in range(1, unidad)
+        )
         disponibles[unidad] = (
-            semana_apertura <= semana <= SEMANA_CIERRE
+            semana < SEMANA_CIERRE
             and anteriores_completas
         )
+    promedio_guardado = bool(alumnos) and all(
+        alumno["final_guardado"] is not None for alumno in alumnos
+    )
     return {
         "semana": semana,
-        "cerrado": semana > SEMANA_CIERRE,
+        "cerrado": semana >= SEMANA_CIERRE or promedio_guardado,
         "completas": completo,
         "disponibles": disponibles,
-        "final_generado": semana >= SEMANA_CIERRE and completo[1]
-        and completo[2] and completo[3],
+        "final_generado": semana >= SEMANA_CIERRE or promedio_guardado,
+        "promedio_guardado": promedio_guardado,
     }
 
 
@@ -241,20 +264,43 @@ def obtener_lista_docente(usuario_id, grupo_id):
     if conexion is None:
         return None, "No fue posible conectar con la base de datos."
     try:
-        with conexion.cursor() as cursor:
-            grupo = _contexto_grupo(
-                cursor, usuario_id, grupo_id, bloquear="SHARE"
-            )
-            if grupo is None:
-                return None, "No tienes acceso a ese grupo."
-            alumnos = _filas_alumnos(cursor, grupo_id)
-        estado = _estado_evaluaciones(grupo, alumnos)
-        for alumno in alumnos:
-            alumno["final"] = (
-                _promedio_final(alumno["evaluaciones"])
-                if estado["final_generado"]
-                else None
-            )
+        with conexion:
+            with conexion.cursor() as cursor:
+                grupo = _contexto_grupo(
+                    cursor, usuario_id, grupo_id, bloquear="SHARE"
+                )
+                if grupo is None:
+                    return None, "No tienes acceso a ese grupo."
+                alumnos = _filas_alumnos(cursor, grupo_id)
+                estado = _estado_evaluaciones(grupo, alumnos)
+                for alumno in alumnos:
+                    promedio = _promedio_final(alumno["evaluaciones"])
+                    if (
+                        estado["cerrado"]
+                        and promedio is not None
+                        and alumno["final_guardado"] is None
+                    ):
+                        _guardar_valor_calificacion(
+                            cursor,
+                            alumno["alumno_grupo_id"],
+                            "promediofinal",
+                            promedio,
+                        )
+                        alumno["final_guardado"] = promedio
+                    alumno["final"] = (
+                        alumno["final_guardado"]
+                        if alumno["final_guardado"] is not None
+                        else promedio
+                    )
+                estado["promedio_guardado"] = bool(alumnos) and all(
+                    alumno["final_guardado"] is not None
+                    for alumno in alumnos
+                )
+                estado["cerrado"] = (
+                    estado["semana"] >= SEMANA_CIERRE
+                    or estado["promedio_guardado"]
+                )
+                estado["final_generado"] = estado["cerrado"]
         return {"grupo": grupo, "alumnos": alumnos, "estado": estado}, None
     except psycopg.Error as error:
         print(f"Error al consultar alumnos del grupo docente: {error}")
@@ -378,24 +424,19 @@ def guardar_evaluacion(usuario_id, grupo_id, unidad, calificaciones):
                     return False, "No tienes acceso a ese grupo."
 
                 semana = _semana_periodo(grupo["fecha_inicio"])
-                if semana < SEMANA_UNIDAD[unidad]:
-                    return False, (
-                        f"La evaluación {unidad} se habilita en la semana "
-                        f"{SEMANA_UNIDAD[unidad]}."
-                    )
-                if semana > SEMANA_CIERRE:
-                    return False, "El periodo de captura ya está cerrado."
+                if semana >= SEMANA_CIERRE:
+                    return False, "El periodo de captura está cerrado."
 
                 alumnos = _filas_alumnos(cursor, grupo_id)
                 if not alumnos:
                     return False, "El grupo no tiene alumnos inscritos."
-                controles = {alumno["control"] for alumno in alumnos}
-                if set(calificaciones) != controles:
+                if any(
+                    alumno["final_guardado"] is not None for alumno in alumnos
+                ):
                     return False, (
-                        "La lista de alumnos cambió. Actualiza la pantalla "
-                        "antes de guardar."
+                        "El promedio final ya se guardó; las calificaciones "
+                        "quedaron bloqueadas."
                     )
-
                 for previa in range(1, unidad):
                     if any(
                         alumno["evaluaciones"][previa - 1] is None
@@ -405,6 +446,12 @@ def guardar_evaluacion(usuario_id, grupo_id, unidad, calificaciones):
                             f"Completa la evaluación {previa} de todo el grupo "
                             "antes de continuar."
                         )
+                controles = {alumno["control"] for alumno in alumnos}
+                if set(calificaciones) != controles:
+                    return False, (
+                        "La lista de alumnos cambió. Actualiza la pantalla "
+                        "antes de guardar."
+                    )
 
                 normalizadas = []
                 for alumno in alumnos:
@@ -413,23 +460,77 @@ def guardar_evaluacion(usuario_id, grupo_id, unidad, calificaciones):
                     )
                     if problema:
                         return False, f"{alumno['nombre']}: {problema}"
-                    normalizadas.append(
-                        (alumno["alumno_grupo_id"], unidad, valor)
-                    )
+                    normalizadas.append((alumno, valor))
 
-                cursor.executemany(
-                    """
-                    INSERT INTO public.calificaciones
-                        (alumno_grupo_id, unidad, calificacion)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (alumno_grupo_id, unidad)
-                    DO UPDATE SET calificacion = EXCLUDED.calificacion
-                    """,
-                    normalizadas,
-                )
+                columna = f"evaluacion{unidad}"
+                for alumno, valor in normalizadas:
+                    cursor.execute(
+                        f"""
+                        UPDATE public.calificaciones
+                        SET {columna} = %s, promediofinal = NULL
+                        WHERE alumno_grupo_id = %s
+                        """,
+                        (valor, alumno["alumno_grupo_id"]),
+                    )
+                    if cursor.rowcount == 0:
+                        cursor.execute(
+                            f"""
+                            INSERT INTO public.calificaciones
+                                (alumno_grupo_id, {columna})
+                            VALUES (%s, %s)
+                            """,
+                            (alumno["alumno_grupo_id"], valor),
+                        )
         return True, f"Evaluación {unidad} guardada para todo el grupo."
     except psycopg.Error as error:
         print(f"Error al guardar calificaciones del docente: {error}")
         return False, "No se pudieron guardar las calificaciones."
+    finally:
+        conexion.close()
+
+
+def guardar_promedio_final(usuario_id, grupo_id):
+    conexion = obtener_conexion()
+    if conexion is None:
+        return False, "No fue posible conectar con la base de datos."
+    try:
+        with conexion:
+            with conexion.cursor() as cursor:
+                grupo = _contexto_grupo(
+                    cursor, usuario_id, grupo_id, bloquear="UPDATE"
+                )
+                if grupo is None:
+                    return False, "No tienes acceso a ese grupo."
+
+                alumnos = _filas_alumnos(cursor, grupo_id)
+                if not alumnos:
+                    return False, "El grupo no tiene alumnos inscritos."
+                if any(alumno["final_guardado"] is not None for alumno in alumnos):
+                    return False, (
+                        "El promedio final ya fue guardado; las calificaciones "
+                        "no se pueden modificar."
+                    )
+                if any(
+                    valor is None
+                    for alumno in alumnos
+                    for valor in alumno["evaluaciones"]
+                ):
+                    return False, (
+                        "Completa las tres evaluaciones de todo el grupo "
+                        "antes de guardar el promedio final."
+                    )
+
+                for alumno in alumnos:
+                    promedio = _promedio_final(alumno["evaluaciones"])
+                    _guardar_valor_calificacion(
+                        cursor,
+                        alumno["alumno_grupo_id"],
+                        "promediofinal",
+                        promedio,
+                    )
+        return True, "Promedio final guardado. Las calificaciones quedaron bloqueadas."
+    except psycopg.Error as error:
+        print(f"Error al guardar el promedio final del docente: {error}")
+        return False, "No se pudo guardar el promedio final."
     finally:
         conexion.close()

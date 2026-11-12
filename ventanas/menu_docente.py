@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize, QUrl
-from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPixmap
+from PySide6.QtGui import QColor, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -29,12 +30,14 @@ from Logica.portal_docente import (
     SEMANA_CIERRE,
     SEMANA_UNIDAD,
     guardar_evaluacion,
+    guardar_promedio_final,
     listar_grupos_docente,
     obtener_estado_calificaciones,
     obtener_horario_docente,
     obtener_perfil_docente,
 )
 from reportes.generador_pdf import generar_pdf_consulta
+from ventanas.componentes import InsigniaUsuario
 from ventanas.ventana import Config, VentanaBase, ruta_recurso
 
 DIAS_SEMANA = (
@@ -76,103 +79,89 @@ class VentanaMenuDocente(VentanaBase):
 
     def _crear_interfaz(self):
         raiz = QHBoxLayout(self)
-        raiz.setContentsMargins(0, 0, 0, 0)
-        raiz.setSpacing(0)
+        raiz.setContentsMargins(24, 20, 24, 20)
+        raiz.setSpacing(20)
 
-        self.barra_lateral = QFrame()
-        self.barra_lateral.setObjectName("barraLateral")
-        self.barra_lateral.setFixedWidth(232)
-        self.barra_lateral.setStyleSheet("""
-            QFrame#barraLateral {
-                background: #0B3768;
-                border-right: 1px solid #174A7E;
-            }
+        self.barra_navegacion = QFrame()
+        self.barra_navegacion.setObjectName("barraNavegacionDocente")
+        self.barra_navegacion.setFixedWidth(238)
+        self.barra_navegacion.setStyleSheet(f"""
+            QFrame#barraNavegacionDocente {{
+                background: {Config.FONDO_FORM};
+                border: 1px solid {Config.FONDO_FORM_BORDE};
+                border-radius: 18px;
+            }}
         """)
-        lateral = QVBoxLayout(self.barra_lateral)
-        lateral.setContentsMargins(11, 12, 11, 12)
-        lateral.setSpacing(5)
-
-        perfil = QVBoxLayout()
-        perfil.setAlignment(Qt.AlignCenter)
-        avatar = QLabel()
-        avatar.setFixedSize(64, 64)
-        avatar.setAlignment(Qt.AlignCenter)
-        avatar.setStyleSheet(
-            "background: #E8F2FC; border: 3px solid #FFFFFF; "
-            "border-radius: 39px; color: #15518A; font-size: 30px;"
-        )
-        icono_usuario = ruta_recurso("iconosesion.png")
-        if icono_usuario:
-            avatar.setPixmap(
-                QPixmap(str(icono_usuario)).scaled(
-                    44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation
-                )
-            )
-        else:
-            avatar.setText(self.nombre_docente[:1].upper())
-        nombre = QLabel(self.usuario)
-        nombre.setAlignment(Qt.AlignCenter)
-        nombre.setWordWrap(True)
-        nombre.setStyleSheet(
-            "color: white; font-size: 14px; font-weight: bold; "
-            "background: transparent; padding-top: 6px;"
-        )
-        rol = QLabel("Docente")
-        rol.setAlignment(Qt.AlignCenter)
-        rol.setStyleSheet(
-            "color: #D7E8F8; font-size: 12px; background: transparent;"
-        )
-        perfil.addWidget(avatar)
-        perfil.addWidget(nombre)
-        perfil.addWidget(rol)
-        lateral.addLayout(perfil)
-
-        separador = QFrame()
-        separador.setFixedHeight(2)
-        separador.setStyleSheet("background: #B7D5F2; border: none;")
-        lateral.addSpacing(5)
-        lateral.addWidget(separador)
-        lateral.addSpacing(5)
+        lateral = QVBoxLayout(self.barra_navegacion)
+        lateral.setContentsMargins(12, 16, 12, 16)
+        lateral.setSpacing(8)
 
         self._botones_navegacion = []
         opciones = (
-            ("Inicio", "inicio.png", 0),
-            ("Mis grupos", "altadocente-icono.png", 1),
-            ("Captura de calificaciones", "archivo.png", 2),
-            ("Horario", "consulta-icono.png", 3),
-            ("Lista de alumnos", "consulta-icono.png", 4),
-            ("Reportes e impresión", "archivo-pdf.png", 5),
+            ("Inicio", "inicio.png"),
+            ("Mis grupos", "iconogrupo.png"),
+            ("Calificaciones", "iconocalificaciones.png"),
+            ("Horario", "iconohorario.png"),
+            ("Lista de alumnos", "iconolista.png"),
+            ("Reportes", "archivo-pdf.png"),
         )
-        for texto, archivo_icono, pagina in opciones:
-            boton = self._crear_boton_navegacion(texto, archivo_icono)
+        for indice, (texto, archivo) in enumerate(opciones):
+            boton = QPushButton(texto)
+            boton.setCheckable(True)
+            boton.setMinimumHeight(52)
+            boton.setCursor(Qt.PointingHandCursor)
+            boton.setIconSize(QSize(25, 25))
+            icono = ruta_recurso(archivo)
+            if icono:
+                boton.setIcon(QIcon(str(icono)))
+            boton.setStyleSheet(f"""
+                QPushButton {{
+                    color: {Config.TEXTO_OSCURO};
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 12px;
+                    padding: 8px 10px;
+                    text-align: left;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background: {Config.FONDO_TARJETA};
+                    border-color: {Config.FONDO_FORM_BORDE};
+                }}
+                QPushButton:checked {{
+                    color: white;
+                    background: {Config.AZUL_ENTRAR};
+                    border-color: {Config.AZUL_ENTRAR};
+                }}
+            """)
             boton.clicked.connect(
-                lambda _=False, indice=pagina: self._mostrar_pagina(indice)
+                lambda _=False, pagina=indice: self._mostrar_pagina(pagina)
             )
             lateral.addWidget(boton)
             self._botones_navegacion.append(boton)
-
         lateral.addStretch(1)
-        separador_salida = QFrame()
-        separador_salida.setFixedHeight(2)
-        separador_salida.setStyleSheet("background: #B7D5F2; border: none;")
-        lateral.addWidget(separador_salida)
-        salir = self._crear_boton_navegacion("Cerrar sesión", "iconosesion.png")
-        salir.clicked.connect(self.salir)
-        lateral.addWidget(salir)
-        raiz.addWidget(self.barra_lateral)
-
-        contenido = QFrame()
-        contenido.setObjectName("contenidoPrincipal")
-        contenido.setStyleSheet(
-            "QFrame#contenidoPrincipal { background: #F3F7FC; border: none; }"
+        lateral.addWidget(
+            self.crear_boton_salida("Salir", self.salir, ancho=210, alto=42)
         )
-        principal = QVBoxLayout(contenido)
-        principal.setContentsMargins(0, 0, 0, 0)
-        principal.setSpacing(0)
-        principal.addWidget(self._crear_membrete())
+        raiz.addWidget(self.barra_navegacion)
+
+        principal = QVBoxLayout()
+        principal.setContentsMargins(4, 0, 4, 0)
+        principal.setSpacing(12)
+
+        cabecera = QHBoxLayout()
+        cabecera.addWidget(
+            self.crear_label_titulo("Bienvenido docente", 26)
+        )
+        cabecera.addStretch()
+        cabecera.addWidget(InsigniaUsuario(self.usuario), 0, Qt.AlignVCenter)
+        principal.addLayout(cabecera)
 
         self.paginas = QStackedWidget()
-        self.paginas.setStyleSheet("QStackedWidget { background: #F3F7FC; }")
+        self.paginas.setStyleSheet(
+            f"QStackedWidget {{ background: {Config.FONDO_FORM}; }}"
+        )
         self.paginas.addWidget(self._crear_inicio())
         self.paginas.addWidget(self._crear_grupos())
         self.paginas.addWidget(self._crear_calificaciones())
@@ -180,97 +169,68 @@ class VentanaMenuDocente(VentanaBase):
         self.paginas.addWidget(self._crear_lista())
         self.paginas.addWidget(self._crear_reportes())
         principal.addWidget(self.paginas, 1)
-
-        pie = QLabel("SIGEA · Sistema Integral de Gestión Escolar y Académica")
-        pie.setAlignment(Qt.AlignCenter)
-        pie.setStyleSheet(
-            "color: #375477; background: #E4EDF8; padding: 9px; "
-            "font-size: 11px; border-top: 1px solid #C5D6EB;"
-        )
-        principal.addWidget(pie)
-        raiz.addWidget(contenido, 1)
         self._mostrar_pagina(0)
+        raiz.addLayout(principal, 1)
 
-    def _crear_boton_navegacion(self, texto, archivo_icono):
-        boton = QPushButton(texto)
-        boton.setMinimumHeight(54)
-        boton.setCursor(Qt.PointingHandCursor)
-        boton.setIconSize(QSize(26, 26))
-        icono = ruta_recurso(archivo_icono)
-        if icono:
-            boton.setIcon(QIcon(str(icono)))
-        boton.setStyleSheet("""
-            QPushButton {
-                color: white;
-                background: transparent;
-                border: 1px solid transparent;
-                border-radius: 10px;
-                padding: 8px 12px;
-                text-align: left;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: #155E9E;
-                border-color: #4B92CF;
-            }
-            QPushButton:checked {
-                color: #102A4B;
-                background: #E7F0FA;
-                border-color: #C8D9EC;
-            }
-        """)
-        return boton
+    def _crear_inicio(self):
+        pagina, layout = self._crear_pagina("")
+        layout.setContentsMargins(18, 18, 18, 18)
 
-    def _crear_membrete(self):
-        marco = QFrame()
-        marco.setMinimumHeight(126)
-        marco.setMaximumHeight(136)
-        marco.setStyleSheet(
-            "QFrame { background: #E9F2FC; border: none; "
-            "border-bottom: 4px solid #C5DDF4; }"
+        tarjetas = QGridLayout()
+        tarjetas.setHorizontalSpacing(16)
+        tarjetas.setVerticalSpacing(16)
+        tarjetas.setAlignment(Qt.AlignCenter)
+        accesos = (
+            ("Mis grupos", "Consulta los grupos que tienes asignados", 1, "iconogrupo.png"),
+            ("Calificaciones", "Captura y modifica evaluaciones", 2, "iconocalificaciones.png"),
+            ("Horario", "Consulta tu horario semanal de clases", 3, "iconohorario.png"),
+            ("Lista de alumnos", "Consulta las listas de tus grupos", 4, "iconolista.png"),
+            ("Reportes", "Genera listas y reportes de tus grupos", 5, "archivo-pdf.png"),
         )
-        fila = QHBoxLayout(marco)
-        fila.setContentsMargins(16, 8, 16, 8)
-        fila.setSpacing(12)
-        for archivo in ("Logotecnm300.png", "logo-ita300.png"):
-            etiqueta = QLabel()
-            etiqueta.setAlignment(Qt.AlignCenter)
-            etiqueta.setFixedWidth(128)
-            ruta = ruta_recurso(archivo)
-            if ruta:
-                etiqueta.setPixmap(
-                    QPixmap(str(ruta)).scaled(
-                        120, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation
-                    )
-                )
-            fila.addWidget(etiqueta)
-
-        linea = QFrame()
-        linea.setFixedWidth(3)
-        linea.setStyleSheet("background: #143F73; border: none;")
-        fila.addWidget(linea)
-        institucion = QVBoxLayout()
-        institucion.setAlignment(Qt.AlignCenter)
-        titulo = QLabel("Instituto Tecnológico de Acapulco")
-        titulo.setAlignment(Qt.AlignCenter)
-        titulo.setStyleSheet(
-            "color: #123D70; font-size: 20px; font-weight: bold; "
-            "background: transparent;"
-        )
-        subtitulo = QLabel("Sistema Integral de Gestión Escolar y Académica")
-        subtitulo.setAlignment(Qt.AlignCenter)
-        subtitulo.setStyleSheet(
-            "color: #345B86; font-size: 13px; background: transparent;"
-        )
-        institucion.addWidget(titulo)
-        institucion.addWidget(subtitulo)
-        fila.addLayout(institucion, 1)
-        return marco
+        for posicion, (texto, detalle, indice, archivo) in enumerate(accesos):
+            boton = QToolButton()
+            boton.setText(texto)
+            boton.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            boton.setFixedSize(194, 184)
+            boton.setCursor(Qt.PointingHandCursor)
+            boton.setIconSize(QSize(58, 58))
+            boton.setToolTip(detalle)
+            icono = ruta_recurso(archivo)
+            if icono:
+                boton.setIcon(QIcon(str(icono)))
+            boton.setStyleSheet(f"""
+                QToolButton {{
+                    color: {Config.TEXTO_OSCURO};
+                    background: {Config.FONDO_FORM};
+                    border: 1px solid {Config.FONDO_FORM_BORDE};
+                    border-radius: 16px;
+                    padding: 14px;
+                    font-size: 14px;
+                    font-weight: bold;
+                }}
+                QToolButton:hover {{
+                    border: 2px solid {Config.AZUL_FORM};
+                    background: {Config.FONDO_TARJETA};
+                }}
+                QToolButton:pressed {{
+                    background: {Config.AZUL_BRIGHT};
+                }}
+            """)
+            boton.clicked.connect(
+                lambda _=False, pagina_indice=indice:
+                self._mostrar_pagina(pagina_indice)
+            )
+            tarjetas.addWidget(boton, posicion // 3, posicion % 3)
+        layout.addStretch(1)
+        layout.addLayout(tarjetas)
+        layout.addStretch(1)
+        return pagina
 
     def _crear_pagina(self, titulo, subtitulo=""):
         pagina = QWidget()
-        pagina.setStyleSheet("QWidget { background: #F3F7FC; }")
+        pagina.setStyleSheet(
+            f"QWidget {{ background: {Config.FONDO_FORM}; }}"
+        )
         layout = QVBoxLayout(pagina)
         layout.setContentsMargins(28, 18, 28, 18)
         layout.setSpacing(10)
@@ -289,83 +249,6 @@ class VentanaMenuDocente(VentanaBase):
             )
             layout.addWidget(descripcion)
         return pagina, layout
-
-    def _crear_inicio(self):
-        pagina, layout = self._crear_pagina("")
-        layout.setContentsMargins(28, 14, 28, 14)
-        bienvenida = QLabel(f"Bienvenido(a), {self.usuario}")
-        bienvenida.setAlignment(Qt.AlignCenter)
-        bienvenida.setWordWrap(True)
-        bienvenida.setStyleSheet(
-            "color: #102E57; font-size: 23px; font-weight: bold; "
-            "background: transparent;"
-        )
-        modulo = QLabel("Módulo de Docentes · SIGEA")
-        modulo.setAlignment(Qt.AlignCenter)
-        modulo.setStyleSheet(
-            "color: #164A86; font-size: 16px; font-style: italic; "
-            "background: transparent;"
-        )
-        layout.addWidget(bienvenida)
-        layout.addWidget(modulo)
-
-        aviso = QLabel(
-            "Gestiona tus grupos, registra calificaciones y consulta tu "
-            "horario de manera fácil y segura."
-        )
-        aviso.setWordWrap(True)
-        aviso.setAlignment(Qt.AlignCenter)
-        aviso.setStyleSheet("""
-            QLabel {
-                color: #123D70;
-                background: #D9EAFB;
-                border: 1px solid #9CC4EE;
-                border-radius: 13px;
-                padding: 11px 18px;
-                font-size: 15px;
-                font-weight: bold;
-            }
-        """)
-        layout.addWidget(aviso)
-
-        tarjetas = QGridLayout()
-        tarjetas.setSpacing(14)
-        accesos = (
-            ("Mis grupos", "Consulta los grupos que tienes asignados", "#E8F2FC", 1, "altadocente-icono.png"),
-            ("Captura de calificaciones", "Registra y modifica evaluaciones", "#E5F6F0", 2, "archivo.png"),
-            ("Horario", "Consulta tu horario semanal de clases", "#F0ECFA", 3, "consulta-icono.png"),
-            ("Lista de alumnos", "Consulta e imprime las listas de tus grupos", "#FFF3E5", 4, "archivo-pdf.png"),
-        )
-        for posicion, (texto, detalle, color, indice, archivo) in enumerate(accesos):
-            boton = QPushButton(f"{texto}\n\n{detalle}")
-            boton.setMinimumHeight(122)
-            boton.setCursor(Qt.PointingHandCursor)
-            boton.setIconSize(QSize(42, 42))
-            ruta = ruta_recurso(archivo)
-            if ruta:
-                boton.setIcon(QIcon(str(ruta)))
-            boton.setStyleSheet(f"""
-                QPushButton {{
-                    color: #102E57;
-                    background: {color};
-                    border: 1px solid #C6D9EE;
-                    border-radius: 13px;
-                    padding: 11px;
-                    font-size: 13px;
-                    font-weight: bold;
-                }}
-                QPushButton:hover {{
-                    border: 2px solid #78A9DB;
-                    background: #FFFFFF;
-                }}
-            """)
-            boton.clicked.connect(
-                lambda _=False, pagina_indice=indice:
-                self._mostrar_pagina(pagina_indice)
-            )
-            tarjetas.addWidget(boton, posicion // 2, posicion % 2)
-        layout.addLayout(tarjetas, 1)
-        return pagina
 
     def _crear_grupos(self):
         pagina, layout = self._crear_pagina(
@@ -409,7 +292,10 @@ class VentanaMenuDocente(VentanaBase):
     def _crear_calificaciones(self):
         pagina, layout = self._crear_pagina(
             "CAPTURA DE CALIFICACIONES",
-            "Captura o corrige la evaluación habilitada para el grupo seleccionado.",
+            "Captura las evaluaciones en orden, sin saltar ninguna. Acepta "
+            "calificaciones de 70 a 100; las menores a 70 se guardan como 0. "
+            "No se redondean (máximo dos decimales). La captura y corrección "
+            "se cierran al iniciar la semana 17.",
         )
         self.grupo_calificaciones = self._crear_selector_grupo(
             layout, "Grupo y materia:"
@@ -428,6 +314,9 @@ class VentanaMenuDocente(VentanaBase):
             self.selector_unidad.addItem(
                 f"Evaluación {unidad} · Semana {semana}", unidad
             )
+        self.selector_unidad.addItem(
+            f"Promedio final · Semana {SEMANA_CIERRE}", "final"
+        )
         self.selector_unidad.currentIndexChanged.connect(
             self._cargar_calificaciones
         )
@@ -459,9 +348,7 @@ class VentanaMenuDocente(VentanaBase):
         self.tabla_calificaciones.setSelectionBehavior(
             QTableWidget.SelectRows
         )
-        self.tabla_calificaciones.setEditTriggers(
-            QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed
-        )
+        self.tabla_calificaciones.setEditTriggers(QTableWidget.AllEditTriggers)
         self.tabla_calificaciones.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents
         )
@@ -679,7 +566,6 @@ class VentanaMenuDocente(VentanaBase):
     def _mostrar_pagina(self, indice):
         self.paginas.setCurrentIndex(indice)
         for numero, boton in enumerate(self._botones_navegacion):
-            boton.setCheckable(True)
             boton.setChecked(numero == indice)
 
     def _cargar_datos_iniciales(self):
@@ -762,7 +648,7 @@ class VentanaMenuDocente(VentanaBase):
         contenido.addWidget(titulo)
         contenido.addWidget(detalle)
         fila.addLayout(contenido, 1)
-        boton = QPushButton("Ver horario completo")
+        boton = QPushButton("Subir calificaciones")
         boton.setCursor(Qt.PointingHandCursor)
         boton.setStyleSheet("""
             QPushButton {
@@ -771,13 +657,17 @@ class VentanaMenuDocente(VentanaBase):
             }
             QPushButton:hover { background: #0B528A; }
         """)
-        boton.clicked.connect(self._abrir_horario_completo)
+        boton.clicked.connect(
+            lambda _=False, grupo_id=grupo["grupo_id"]:
+            self._abrir_calificaciones_grupo(grupo_id)
+        )
         fila.addWidget(boton)
         return tarjeta
 
-    def _abrir_horario_completo(self):
-        self._cargar_horario()
-        self._mostrar_pagina(3)
+    def _abrir_calificaciones_grupo(self, grupo_id):
+        self._seleccionar_grupo(self.grupo_calificaciones, grupo_id)
+        self._cargar_calificaciones()
+        self._mostrar_pagina(2)
 
     @staticmethod
     def _seleccionar_grupo(combo, grupo_id):
@@ -823,45 +713,61 @@ class VentanaMenuDocente(VentanaBase):
         self._datos_calificaciones = datos
         estado = datos["estado"]
         unidad = self.selector_unidad.currentData()
-        semana_apertura = SEMANA_UNIDAD[unidad]
-        if estado["cerrado"]:
+        es_promedio_final = unidad == "final"
+        disponible = (
+            False if es_promedio_final else estado["disponibles"][unidad]
+        )
+        if es_promedio_final:
+            estado_texto = f"Promedio final · Semana {SEMANA_CIERRE}"
+        elif estado["cerrado"]:
             estado_texto = (
-                "Captura cerrada. Las evaluaciones ya no se pueden modificar."
+                "Captura cerrada desde la semana 17. Ya no se pueden "
+                "modificar las calificaciones."
             )
-        elif estado["semana"] < semana_apertura:
-            estado_texto = (
-                f"Evaluación {unidad}: se habilita en la semana "
-                f"{semana_apertura}."
+        elif not disponible:
+            evaluacion_previa = next(
+                previa
+                for previa in range(1, unidad)
+                if not estado["completas"][previa]
             )
-        elif not all(
-            estado["completas"][n] for n in range(1, unidad)
-        ):
             estado_texto = (
-                f"Completa la(s) evaluación(es) anterior(es) de todo el grupo "
-                f"antes de capturar la evaluación {unidad}."
+                f"Completa la evaluación {evaluacion_previa} de todo el grupo "
+                f"antes de capturar o corregir la evaluación {unidad}."
             )
         else:
             estado_texto = (
-                f"Semana del periodo: {estado['semana']}. "
-                f"Evaluación {unidad} habilitada para captura o corrección."
+                f"Evaluación {unidad} seleccionada. Puedes capturar o corregir "
+                "las calificaciones del grupo."
             )
-        if estado["final_generado"]:
+        if not es_promedio_final and estado["final_generado"]:
             estado_texto += " La calificación final está disponible."
-        elif estado["semana"] >= SEMANA_CIERRE:
+        elif not es_promedio_final and any(
+            alumno["evaluaciones"][unidad - 1] is None
+            for alumno in datos["alumnos"]
+        ):
             estado_texto += (
-                " El promedio final queda pendiente mientras falten evaluaciones."
+                " El promedio final seguirá pendiente hasta completar "
+                "las evaluaciones."
             )
         self.etiqueta_estado_calificaciones.setText(estado_texto)
         self._mostrar_calificaciones(
             datos["alumnos"],
             unidad,
-            estado["disponibles"][unidad] and not estado["cerrado"],
-            estado["final_generado"],
+            disponible and not estado["cerrado"],
+            es_promedio_final or estado["final_generado"],
         )
         self.boton_guardar_calificaciones.setEnabled(
-            bool(datos["alumnos"])
-            and estado["disponibles"][unidad]
-            and not estado["cerrado"]
+            (
+                bool(datos["alumnos"])
+                and all(estado["completas"].values())
+                and not estado["promedio_guardado"]
+            )
+            if es_promedio_final
+            else (
+                bool(datos["alumnos"])
+                and disponible
+                and not estado["cerrado"]
+            )
         )
 
     def _mostrar_calificaciones(self, alumnos, unidad, editable, final_generado):
@@ -889,7 +795,11 @@ class VentanaMenuDocente(VentanaBase):
             for columna, valor in enumerate(valores):
                 item = QTableWidgetItem(str(valor))
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                if columna == unidad + 1 and editable:
+                if (
+                    editable
+                    and isinstance(unidad, int)
+                    and columna == unidad + 1
+                ):
                     item.setFlags(item.flags() | Qt.ItemIsEditable)
                     if alumno["evaluaciones"][unidad - 1] is None:
                         item.setText("")
@@ -897,6 +807,18 @@ class VentanaMenuDocente(VentanaBase):
 
     def _guardar_calificaciones(self):
         if self._datos_calificaciones is None:
+            return
+        if self.selector_unidad.currentData() == "final":
+            correcto, mensaje = guardar_promedio_final(
+                self.usuario_id,
+                self._grupo_id(self.grupo_calificaciones),
+            )
+            if correcto:
+                QMessageBox.information(self, "Calificaciones", mensaje)
+                self._cargar_calificaciones()
+                self._cargar_lista()
+            else:
+                QMessageBox.warning(self, "Calificaciones", mensaje)
             return
         unidad = self.selector_unidad.currentData()
         valores = {}
