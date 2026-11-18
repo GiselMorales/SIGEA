@@ -55,9 +55,8 @@ class VentanaConstanciaEstudios(VentanaBase):
 
         contenido = QVBoxLayout()
         contenido.setSpacing(14)
-        intro = self.crear_label_campo(
-            "Busca al alumno por número de control y descarga la constancia "
-            "sin calificaciones o con sus evaluaciones actuales."
+        intro = self.crear_label_subtitulo(
+            "Busca al alumno por número de control y descarga la constancia con o sin calificaciones.", 13, "#FFFFFF"
         )
         intro.setWordWrap(True)
         contenido.addWidget(intro)
@@ -95,13 +94,13 @@ class VentanaConstanciaEstudios(VentanaBase):
         acciones = QHBoxLayout()
         acciones.addStretch()
         self.boton_sin_calificaciones = self.crear_boton(
-            "Descargar sin calificaciones",
+            "Sin calificación",
             lambda: self.descargar(False),
             250,
             48,
         )
         self.boton_con_calificaciones = self.crear_boton(
-            "Descargar con calificaciones",
+            "Con calificación",
             lambda: self.descargar(True),
             250,
             48,

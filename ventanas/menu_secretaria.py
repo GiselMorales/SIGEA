@@ -7,6 +7,7 @@ from ventanas.componentes import InsigniaUsuario
 from ventanas.alta_alumno import VentanaAltaAlumno
 from ventanas.alta_docente import VentanaAltaDocente
 from ventanas.modificar_docente import VentanaModificarDocente
+from ventanas.baja_docente import VentanaBajaDocente
 from ventanas.consulta_docentes import VentanaConsultaDocentes
 from ventanas.alta_secretaria import VentanaAltaSecretaria
 from ventanas.baja_secretaria import VentanaBajaSecretaria
@@ -39,6 +40,7 @@ ICONOS_ALUMNOS = {
 ICONOS_DOCENTE = {
     "DOCENTE/Alta de docente": "altadocente-icono.png",
     "DOCENTE/Modificaciones": "modificar-icono.png",
+    "DOCENTE/Baja de docente": "bajadocente-icono.png",
     "DOCENTE/Consultas": "consulta-icono.png",
 }
 ICONOS_SECRETARIA = {
@@ -80,6 +82,7 @@ class VentanaMenuAdmin(VentanaBase):
             ),
             "ALUMNOS/Constancias": lambda: self._abrir(VentanaConstanciaEstudios),
             "DOCENTE/Alta de docente": lambda: self._abrir(VentanaAltaDocente),
+            "DOCENTE/Baja de docente": lambda: self._abrir(VentanaBajaDocente),
             "DOCENTE/Modificaciones": lambda: self._abrir(VentanaModificarDocente),
             "DOCENTE/Consultas": lambda: self._abrir(VentanaConsultaDocentes),
             "SECRETARIA/Alta de secretaria": lambda: self._abrir(VentanaAltaSecretaria),
@@ -156,7 +159,7 @@ class VentanaMenuAdmin(VentanaBase):
             ),
             self.crear_tarjeta_menu(
                 "DOCENTE",
-                ["Alta de docente", "Modificaciones", "Consultas"],
+                ["Alta de docente", "Baja de docente", "Modificaciones", "Consultas"],
                 ruta_recurso("docente.png"),
                 iconos=ICONOS_DOCENTE,
             ),
@@ -169,7 +172,7 @@ class VentanaMenuAdmin(VentanaBase):
             self.crear_tarjeta_menu(
                 "ESTADÍSTICAS",
                 [
-                    ("Generar gráfica", ["Total de alumnos"]),
+                    ("Generar gráfica", ["Total de alumnos", "Alumnos hombres", "Alumnas mujeres"]),
                     ("Generar archivo", ["Horarios", "Lista de grupos"]),
                 ],
                 ruta_recurso("estadisticas.png"),
