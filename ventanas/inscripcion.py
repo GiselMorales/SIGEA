@@ -231,9 +231,9 @@ class VentanaAltaInscripcion(VentanaAlta):
         limpio["semestre"] = semestre_texto
         if mensaje:
             errores["semestre"] = mensaje
-        elif semestre_texto not in ("2", "3", "4", "5", "6"):
+        elif semestre_texto not in ("2", "3"):
             errores["semestre"] = (
-                "Este módulo permite reinscripciones a los semestres 2, 3, 4, 5 y 6."
+                "Este módulo permite reinscripciones a segundo o tercer semestre."
             )
         elif self._alumno:
             try:

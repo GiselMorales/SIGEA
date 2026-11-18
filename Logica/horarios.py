@@ -27,7 +27,7 @@ def listar_grupos_horario(periodo, semestre, turno):
         JOIN public.periodos_escolares AS p ON p.periodo_id = g.periodo_id
         JOIN public.materias AS m ON m.materia_id = g.materia_id
         WHERE p.nombre = %s AND m.semestre = %s
-          AND LOWER(g.turno) = %s AND g.activo
+          AND LOWER(g.turno) = %s
           AND EXISTS (
               SELECT 1 FROM public.horarios AS h
               WHERE h.grupo_id = g.grupo_id
@@ -41,7 +41,7 @@ def listar_grupos_horario(periodo, semestre, turno):
 
 
 def listar_claves_grupo(periodo, semestre, turno):
-    """Claves usadas, incluso si el grupo está inactivo o aún no tiene horario."""
+    """Claves usadas, incluso si aún no tienen horario."""
     filas = _consultar(
         """
         SELECT DISTINCT g.clave_grupo
@@ -122,7 +122,6 @@ def listar_docentes():
         """
         SELECT rfc, apellido_paterno, COALESCE(apellido_materno, ''), nombres
         FROM public.docentes
-        WHERE activo
         ORDER BY apellido_paterno, apellido_materno, nombres
         """,
         (), [],
@@ -352,7 +351,7 @@ def grupos_disponibles(periodo, semestre):
         FROM public.grupos AS g
         JOIN public.periodos_escolares AS p ON p.periodo_id = g.periodo_id
         JOIN public.materias AS m ON m.materia_id = g.materia_id
-        WHERE p.nombre = %s AND m.semestre = %s AND g.activo
+        WHERE p.nombre = %s AND m.semestre = %s
         GROUP BY g.clave_grupo, g.turno
         ORDER BY g.clave_grupo
         """,
@@ -398,7 +397,6 @@ def obtener_horario(periodo, semestre, turno, clave=None):
                 WHERE p.nombre = %s
                   AND g.clave_grupo = %s
                   AND g.turno = %s
-                  AND g.activo = TRUE
                 ORDER BY m.clave
                 """,
                 (periodo, clave, turno),

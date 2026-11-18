@@ -9,6 +9,7 @@ import psycopg
 from psycopg import errors
 
 from conexiondb.db import obtener_conexion
+from Logica.reinscripcion_semestres import validar_numero_control
 
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -217,7 +218,7 @@ def _copiar_archivos(pendientes):
 
 def _consultar_grupos(cursor, periodo_id, clave, turno, semestre):
     """
-    Obtiene los grupos activos del periodo, turno y semestre seleccionados.
+    Obtiene los grupos del periodo, turno y semestre seleccionados.
     Cada grupo corresponde a una materia.
     """
 
@@ -234,7 +235,6 @@ def _consultar_grupos(cursor, periodo_id, clave, turno, semestre):
           AND g.clave_grupo = %s
           AND LOWER(g.turno) = %s
           AND m.semestre = %s
-          AND g.activo = TRUE
           AND EXISTS (
               SELECT 1
               FROM public.horarios AS h
@@ -365,6 +365,10 @@ def registrar_tramite(datos):
 
     if not 1 <= semestre <= 12:
         return False, "El semestre debe estar entre 1 y 12."
+    if tipo == "Reinscripción":
+        valido, problema = validar_numero_control(numero_control, semestre)
+        if not valido:
+            return False, problema
 
     conexion = obtener_conexion()
 
@@ -375,6 +379,7 @@ def registrar_tramite(datos):
     grupo_ids = []
     info_pdf = None
     alumno_pdf = None
+    promovido = False
     detalle_turno = turno.capitalize()
 
     try:
@@ -499,12 +504,6 @@ def registrar_tramite(datos):
                             "El alumno que cursa primer semestre debe reinscribirse a segundo."
                         )
 
-                    if semestre <= 1:
-                        raise ValueError(
-                            "La reinscripción corresponde al segundo "
-                            "semestre en adelante."
-                        )
-
                     if semestre_actual and semestre < semestre_actual:
                         raise ValueError(
                             f"El alumno cursa el semestre {semestre_actual}; "
@@ -513,12 +512,68 @@ def registrar_tramite(datos):
 
                     cursor.execute(
                         """
-                        INSERT INTO public.reinscripciones
-                            (numero_control, periodo_id, semestre)
-                        VALUES (%s, %s, %s)
+                        SELECT horario_semestre_id
+                        FROM public.horarios_semestre
+                        WHERE semestre = %s AND LOWER(turno) = %s
                         """,
-                        (numero_control, periodo_id, semestre),
+                        (semestre, turno),
                     )
+                    horario = cursor.fetchone()
+                    if horario is None:
+                        raise ValueError(
+                            "No existe un horario registrado para este "
+                            "semestre y turno."
+                        )
+
+                    cursor.execute(
+                        """
+                        SELECT reinscripcion_id, semestre, estado
+                        FROM public.reinscripciones
+                        WHERE numero_control = %s AND periodo_id = %s
+                        FOR UPDATE
+                        """,
+                        (numero_control, periodo_id),
+                    )
+                    reinscripcion_existente = cursor.fetchone()
+                    if reinscripcion_existente:
+                        id_reinscripcion, semestre_registrado, estado_registro = (
+                            reinscripcion_existente
+                        )
+                        puede_promover = (
+                            semestre_registrado == 2
+                            and semestre == 3
+                            and numero_control.startswith("2632")
+                            and estado_registro != "cancelada"
+                        )
+                        if not puede_promover:
+                            raise ValueError(
+                                "El alumno ya tiene una reinscripción "
+                                "para ese periodo."
+                            )
+                        cursor.execute(
+                            """
+                            UPDATE public.reinscripciones
+                            SET semestre = 3, horario_semestre_id = %s
+                            WHERE reinscripcion_id = %s
+                            """,
+                            (horario[0], id_reinscripcion),
+                        )
+                        promovido = True
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO public.reinscripciones
+                                (numero_control, periodo_id, semestre,
+                                 horario_semestre_id)
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (
+                                numero_control,
+                                periodo_id,
+                                semestre,
+                                horario[0],
+                            ),
+                        )
 
                     # Cerrar las materias inscritas en periodos anteriores.
                     cursor.execute(
@@ -541,7 +596,7 @@ def registrar_tramite(datos):
 
                 if not grupos:
                     raise ValueError(
-                        "No se encontraron materias activas con horario "
+                        "No se encontraron materias con horario "
                         "para el grupo, periodo, semestre y turno elegidos."
                     )
 
@@ -666,8 +721,13 @@ def registrar_tramite(datos):
                 "el PDF del horario."
             )
 
+        accion = (
+            "Promoción a tercer semestre"
+            if promovido
+            else tipo
+        )
         mensaje = (
-            f"{tipo} registrada correctamente.\n\n"
+            f"{accion} registrada correctamente.\n\n"
             f"Número de control: {numero_control}\n"
             f"Periodo: {periodo}\n"
             f"Semestre: {semestre}\n"

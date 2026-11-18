@@ -66,6 +66,9 @@ ICONOS_BARRA = {
     "Reinscripciones": "reinscripciones.png",
     "Consultas": "consulta-icono.png",
     "Alta de docente": "altadocente-icono.png",
+    "Baja de docente": "bajadocente-icono.png",
+    "Modificaciones": "modificar-icono.png",
+    "Consultas": "consulta-icono.png",
     "Alta de secretaria": "altadocente-icono.png",
     "Baja de secretaria": "bajadocente-icono.png",
     "Modificación de secretaria": "modificar-icono.png",
@@ -83,13 +86,18 @@ ORDEN_BARRA_ALUMNOS = (
     "Reinscripciones",
     "Consultas",
 )
+ORDEN_BARRA_CONSTANCIAS = ORDEN_BARRA_ALUMNOS + ("Constancias",)
 ORDEN_BARRA_SECRETARIA = (
     "Alta de secretaria",
     "Baja de secretaria",
     "Modificación de secretaria",
     "Consultas",
 )
-ORDEN_BARRA_DOCENTE = ("Alta de docente",)
+ORDEN_BARRA_DOCENTE = (
+    "Alta de docente",
+    "Modificaciones",
+    "Consultas",
+)
 ORDEN_BARRA_HORARIOS = ("Alta de horario", "Consultar horarios")
 ORDEN_BARRA_REPORTES = ("Reporte de horarios", "Lista de grupos")
 
@@ -103,6 +111,11 @@ DESTINOS_ALUMNOS = {
     "Consultas": "ventanas.consulta_alumnos:VentanaConsultaAlumnos",
 }
 
+DESTINOS_CONSTANCIAS = dict(DESTINOS_ALUMNOS)
+DESTINOS_CONSTANCIAS["Constancias"] = (
+    "ventanas.constancia_estudios:VentanaConstanciaEstudios"
+)
+
 DESTINOS_SECRETARIA = {
     "Alta de secretaria": "ventanas.alta_secretaria:VentanaAltaSecretaria",
     "Baja de secretaria": "ventanas.baja_secretaria:VentanaBajaSecretaria",
@@ -112,6 +125,8 @@ DESTINOS_SECRETARIA = {
 
 DESTINOS_DOCENTE = {
     "Alta de docente": "ventanas.alta_docente:VentanaAltaDocente",
+    "Modificaciones": "ventanas.modificar_docente:VentanaModificarDocente",
+    "Consultas": "ventanas.consulta_docentes:VentanaConsultaDocentes",
 }
 
 DESTINOS_HORARIOS = {
@@ -133,6 +148,10 @@ def destinos_barra(orden=ORDEN_BARRA_ALUMNOS, destinos=None):
 
 def destinos_barra_secretaria():
     return destinos_barra(ORDEN_BARRA_SECRETARIA, DESTINOS_SECRETARIA)
+
+
+def destinos_barra_constancias():
+    return destinos_barra(ORDEN_BARRA_CONSTANCIAS, DESTINOS_CONSTANCIAS)
 
 
 def destinos_barra_docente():

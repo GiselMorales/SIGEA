@@ -79,11 +79,10 @@ def main():
                 cursor.execute("""
                     INSERT INTO usuarios (
                         nombre_usuario,
-                        contrasena_hash,
-                        rol,
-                        activo
+                        contrasena,
+                        rol
                     )
-                    VALUES (%s, %s, %s, TRUE);
+                    VALUES (%s, %s, %s);
                 """, (
                     nombre_usuario,
                     crear_hash(contrasena),

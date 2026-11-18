@@ -6,6 +6,8 @@ from ventanas.ventana import VentanaBase, ruta_recurso
 from ventanas.componentes import InsigniaUsuario
 from ventanas.alta_alumno import VentanaAltaAlumno
 from ventanas.alta_docente import VentanaAltaDocente
+from ventanas.modificar_docente import VentanaModificarDocente
+from ventanas.consulta_docentes import VentanaConsultaDocentes
 from ventanas.alta_secretaria import VentanaAltaSecretaria
 from ventanas.baja_secretaria import VentanaBajaSecretaria
 from ventanas.modificar_secretaria import VentanaModificarSecretaria
@@ -19,7 +21,8 @@ from ventanas.baja_alumno import VentanaBajaAlumno
 from ventanas.modificar_alumno import VentanaModificarAlumno
 from ventanas.alta_horario import VentanaAltaHorario
 from ventanas.reportes import VentanaReporteHorarios, VentanaReporteListaGrupo
-from ventanas.grafica_alumnos import VentanaGrafica
+from ventanas.constancia_estudios import VentanaConstanciaEstudios
+from ventanas.modulo_estadisticas import VentanaEstadisticas
 
 
 # Icono de cada opción: "RUTA DE LA OPCIÓN": "archivo.png" (dentro de la carpeta recursos).
@@ -35,7 +38,6 @@ ICONOS_ALUMNOS = {
 }
 ICONOS_DOCENTE = {
     "DOCENTE/Alta de docente": "altadocente-icono.png",
-    "DOCENTE/Baja de docente": "bajadocente-icono.png",
     "DOCENTE/Modificaciones": "modificar-icono.png",
     "DOCENTE/Consultas": "consulta-icono.png",
 }
@@ -76,17 +78,20 @@ class VentanaMenuAdmin(VentanaBase):
             "ALUMNOS/Reinscripciones": lambda: self._abrir(
                 VentanaModuloReinscripcion
             ),
+            "ALUMNOS/Constancias": lambda: self._abrir(VentanaConstanciaEstudios),
             "DOCENTE/Alta de docente": lambda: self._abrir(VentanaAltaDocente),
+            "DOCENTE/Modificaciones": lambda: self._abrir(VentanaModificarDocente),
+            "DOCENTE/Consultas": lambda: self._abrir(VentanaConsultaDocentes),
             "SECRETARIA/Alta de secretaria": lambda: self._abrir(VentanaAltaSecretaria),
             "SECRETARIA/Baja de secretaria": lambda: self._abrir(VentanaBajaSecretaria),
             "SECRETARIA/Modificación de secretaria": lambda: self._abrir(VentanaModificarSecretaria),
             "SECRETARIA/Consultas": lambda: self._abrir(VentanaConsultaSecretarias),
             "SECRETARIA/Horarios": lambda: self._abrir(VentanaAltaHorario),
             "SECRETARIA/Consultar horarios": lambda: self._abrir(VentanaConsultaHorarios),
-            "ESTADÍSTICAS/Generar gráfica": lambda: self._abrir(VentanaGrafica),
-            "ESTADÍSTICAS/Generar gráfica/Total de alumnos": lambda: self._abrir(VentanaGrafica, vista="total"),
-            "ESTADÍSTICAS/Generar gráfica/Alumnos hombres": lambda: self._abrir(VentanaGrafica, vista="hombres"),
-            "ESTADÍSTICAS/Generar gráfica/Alumnas mujeres": lambda: self._abrir(VentanaGrafica, vista="mujeres"),
+            "ESTADÍSTICAS/Generar gráfica": lambda: self._abrir(VentanaEstadisticas),
+            "ESTADÍSTICAS/Generar gráfica/Total de alumnos": lambda: self._abrir(VentanaEstadisticas),
+            "ESTADÍSTICAS/Generar gráfica/Alumnos hombres": lambda: self._abrir(VentanaEstadisticas),
+            "ESTADÍSTICAS/Generar gráfica/Alumnas mujeres": lambda: self._abrir(VentanaEstadisticas),
             "ESTADÍSTICAS/Generar archivo/Horarios": lambda: self._abrir(VentanaReporteHorarios),
             "ESTADÍSTICAS/Generar archivo/Lista de grupos": lambda: self._abrir(VentanaReporteListaGrupo),
         }
@@ -151,7 +156,7 @@ class VentanaMenuAdmin(VentanaBase):
             ),
             self.crear_tarjeta_menu(
                 "DOCENTE",
-                ["Alta de docente", "Baja de docente", "Modificaciones", "Consultas"],
+                ["Alta de docente", "Modificaciones", "Consultas"],
                 ruta_recurso("docente.png"),
                 iconos=ICONOS_DOCENTE,
             ),
@@ -164,7 +169,7 @@ class VentanaMenuAdmin(VentanaBase):
             self.crear_tarjeta_menu(
                 "ESTADÍSTICAS",
                 [
-                    ("Generar gráfica", ["Total de alumnos", "Alumnos hombres", "Alumnas mujeres"]),
+                    ("Generar gráfica", ["Total de alumnos"]),
                     ("Generar archivo", ["Horarios", "Lista de grupos"]),
                 ],
                 ruta_recurso("estadisticas.png"),

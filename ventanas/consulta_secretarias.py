@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QUrl, Qt
-from PySide6.QtGui import QColor, QDesktopServices
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout
 
 from Logica import secretaria as ls
@@ -17,8 +17,8 @@ CARPETA_SALIDA = Path(__file__).resolve().parent.parent / "reportes_generados"
 
 
 class VentanaConsultaSecretarias(VentanaConsulta):
-    COLUMNAS_PDF = ["RFC", "Nombre completo", "CURP", "Puesto", "Grado", "Usuario", "Estado"]
-    ANCHOS_PDF = [90, 180, 125, 150, 100, 105, 75]
+    COLUMNAS_PDF = ["RFC", "Nombre completo", "CURP", "Puesto", "Grado", "Usuario"]
+    ANCHOS_PDF = [90, 190, 125, 150, 100, 110]
     OPCIONES_FILTRO = ["Todos", "RFC", "Nombre", "CURP", "Puesto", "Usuario"]
     ORDEN_BARRA = ORDEN_BARRA_SECRETARIA
     INDICE_BARRA = 4
@@ -136,16 +136,6 @@ class VentanaConsultaSecretarias(VentanaConsulta):
         textos.addWidget(puesto)
         layout.addLayout(textos, 1)
 
-        activo = secretaria["activo"] and secretaria["usuario_activo"]
-        color = QColor("#2E7D32" if activo else "#C0392B")
-        estado = QLabel("Activa" if activo else "Desactivada")
-        estado.setAlignment(Qt.AlignCenter)
-        estado.setStyleSheet(
-            f"color: {color.name()}; font-size: 11px; font-weight: bold; "
-            f"background-color: rgba({color.red()}, {color.green()}, {color.blue()}, 38); "
-            "border-radius: 10px; padding: 4px 14px;"
-        )
-        layout.addWidget(estado, 0, Qt.AlignVCenter)
         return tarjeta
 
     def generar_pdf(self):
@@ -166,8 +156,6 @@ class VentanaConsultaSecretarias(VentanaConsulta):
                 secretaria["puesto"],
                 secretaria["grado_academico"] or "-",
                 secretaria["usuario"],
-                "Activa" if secretaria["activo"] and secretaria["usuario_activo"]
-                else "Desactivada",
             ]
             for secretaria in self._secretarias
         ]

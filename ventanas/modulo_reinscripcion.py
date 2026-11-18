@@ -341,21 +341,32 @@ class VentanaModuloReinscripcion(VentanaBase):
         if problema:
             QMessageBox.warning(self, "Validación", problema)
             return False
-        if existente:
+        promocion = (
+            existente == 2
+            and semestre == 3
+            and numero_control.startswith("2632")
+        )
+        if existente and not promocion:
             QMessageBox.warning(
                 self,
                 "Número de control duplicado",
-                f"El alumno ya aparece registrado en {existente}° semestre.",
+                f"El alumno ya aparece registrado en {existente}° semestre "
+                "para el periodo vigente.",
             )
             return False
 
         self._control_validado = numero_control
         self._cargar_horario()
         if mostrar_exito:
+            mensaje = (
+                "El registro de segundo semestre se actualizará a tercero."
+                if promocion
+                else "El número de control es válido y no está registrado."
+            )
             QMessageBox.information(
                 self,
                 "Número de control",
-                "El número de control es válido y no está registrado.",
+                mensaje,
             )
         return True
 
@@ -633,16 +644,16 @@ class VentanaModuloReinscripcion(VentanaBase):
             "font-weight: bold; background: transparent;"
         )
         fecha = reinscrito["fecha_registro"]
-        fecha_texto = (
-            fecha.strftime("%d/%m/%Y %H:%M") if fecha else "Sin fecha"
-        )
+        fecha_texto = fecha.strftime("%d/%m/%Y") if fecha else "Sin fecha"
         detalle = QLabel(
             f"No. de control: {reinscrito['numero_control']}  •  "
             f"Semestre {reinscrito['semestre']}°  •  "
-            f"Turno {reinscrito['turno'].capitalize()}"
+            f"Turno {reinscrito['turno'].capitalize()}  •  "
+            f"Periodo {reinscrito['periodo']}"
         )
+        estado = f"Estado: {reinscrito['estado']}"
         contacto = QLabel(
-            f"{reinscrito['correo']}  •  Registro: {fecha_texto}"
+            f"{reinscrito['correo']}  •  Registro: {fecha_texto}  •  {estado}"
         )
         for etiqueta in (detalle, contacto):
             etiqueta.setWordWrap(True)

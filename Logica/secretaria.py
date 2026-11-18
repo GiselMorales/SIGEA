@@ -68,10 +68,9 @@ def registrar_secretaria(datos):
                     INSERT INTO usuarios (
                         nombre_usuario,
                         contrasena,
-                        rol,
-                        activo
+                        rol
                     )
-                    VALUES (%s, %s, %s, TRUE)
+                    VALUES (%s, %s, %s)
                     RETURNING usuario_id
                     """,
                     (usuario, contrasena, "administrativo"),
@@ -90,12 +89,11 @@ def registrar_secretaria(datos):
                         apellido_materno,
                         sexo,
                         puesto,
-                        activo,
                         curp, 
                         fecha_nacimiento,
                         grado_academico
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     """,
                     (
@@ -158,9 +156,8 @@ def obtener_secretaria(rfc):
             cursor.execute(
                 """
                 SELECT a.rfc, a.usuario_id, a.nombres, a.apellido_paterno,
-                       a.apellido_materno, a.sexo, a.puesto, a.activo,
-                       a.curp, a.fecha_nacimiento, a.grado_academico,
-                       u.nombre_usuario, u.activo
+                       a.apellido_materno, a.sexo, a.puesto, a.curp,
+                       a.fecha_nacimiento, a.grado_academico, u.nombre_usuario
                 FROM public.administrativos AS a
                 JOIN public.usuarios AS u ON u.usuario_id = a.usuario_id
                 WHERE UPPER(a.rfc) = %s
@@ -179,12 +176,10 @@ def obtener_secretaria(rfc):
             "apellido_materno": fila[4] or "",
             "sexo": fila[5] or "",
             "puesto": fila[6] or "",
-            "activo": bool(fila[7]),
-            "curp": fila[8] or "",
-            "fecha_nacimiento": fila[9].strftime("%d/%m/%Y") if fila[9] else "",
-            "grado_academico": fila[10] or "",
-            "usuario": fila[11] or "",
-            "usuario_activo": bool(fila[12]),
+            "curp": fila[7] or "",
+            "fecha_nacimiento": fila[8].strftime("%d/%m/%Y") if fila[8] else "",
+            "grado_academico": fila[9] or "",
+            "usuario": fila[10] or "",
         }
         registro["nombre_completo"] = " ".join(
             parte for parte in (
@@ -336,9 +331,9 @@ def listar_secretarias(criterio="Todos", valor=""):
             cursor.execute(
                 f"""
                 SELECT a.rfc, a.nombres, a.apellido_paterno,
-                       a.apellido_materno, a.sexo, a.puesto, a.activo,
+                       a.apellido_materno, a.sexo, a.puesto,
                        a.curp, a.fecha_nacimiento, a.grado_academico,
-                       u.nombre_usuario, u.activo
+                       u.nombre_usuario
                 FROM public.administrativos AS a
                 JOIN public.usuarios AS u ON u.usuario_id = a.usuario_id
                 {where}
@@ -357,12 +352,10 @@ def listar_secretarias(criterio="Todos", valor=""):
                 "apellido_materno": fila[3] or "",
                 "sexo": fila[4] or "",
                 "puesto": fila[5] or "",
-                "activo": bool(fila[6]),
-                "curp": fila[7] or "",
-                "fecha_nacimiento": fila[8].strftime("%d/%m/%Y") if fila[8] else "",
-                "grado_academico": fila[9] or "",
-                "usuario": fila[10] or "",
-                "usuario_activo": bool(fila[11]),
+                "curp": fila[6] or "",
+                "fecha_nacimiento": fila[7].strftime("%d/%m/%Y") if fila[7] else "",
+                "grado_academico": fila[8] or "",
+                "usuario": fila[9] or "",
             }
             registro["nombre_completo"] = " ".join(
                 parte for parte in (

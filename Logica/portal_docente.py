@@ -30,14 +30,11 @@ def _perfil_autenticado(cursor, usuario_id):
     cursor.execute(
         """
         SELECT d.rfc, u.nombre_usuario, d.nombres,
-               d.apellido_paterno, d.apellido_materno,
-               d.sexo, d.grado_academico, d.curp, d.fecha_nacimiento
+               d.apellido_paterno, d.apellido_materno
         FROM public.usuarios AS u
         JOIN public.docentes AS d ON d.usuario_id = u.usuario_id
         WHERE u.usuario_id = %s
           AND u.rol = 'docente'
-          AND u.activo
-          AND d.activo
         """,
         (usuario_id,),
     )
@@ -51,10 +48,6 @@ def _perfil_autenticado(cursor, usuario_id):
         "apellido_paterno": fila[3],
         "apellido_materno": fila[4],
         "nombre": _nombre_completo(fila[2], fila[3], fila[4]),
-        "sexo": fila[5],
-        "grado_academico": fila[6],
-        "curp": fila[7],
-        "fecha_nacimiento": fila[8],
     }
 
 
@@ -66,7 +59,7 @@ def obtener_perfil_docente(usuario_id):
         with conexion.cursor() as cursor:
             perfil = _perfil_autenticado(cursor, usuario_id)
         if perfil is None:
-            return None, "La cuenta no corresponde a un docente activo."
+            return None, "La cuenta no corresponde a un docente."
         return perfil, None
     except psycopg.Error as error:
         print(f"Error al consultar el perfil docente: {error}")
@@ -82,7 +75,7 @@ def listar_grupos_docente(usuario_id):
     try:
         with conexion.cursor() as cursor:
             if _perfil_autenticado(cursor, usuario_id) is None:
-                return [], "La cuenta no corresponde a un docente activo."
+                return [], "La cuenta no corresponde a un docente."
             cursor.execute(
                 """
                 SELECT g.grupo_id, g.clave_grupo, m.materia_id,
@@ -96,9 +89,6 @@ def listar_grupos_docente(usuario_id):
                     ON p.periodo_id = g.periodo_id
                 WHERE d.usuario_id = %s
                   AND u.rol = 'docente'
-                  AND u.activo
-                  AND d.activo
-                  AND g.activo
                 ORDER BY p.fecha_inicio DESC, m.semestre, g.clave_grupo, m.clave
                 """,
                 (usuario_id,),
@@ -145,9 +135,6 @@ def _contexto_grupo(cursor, usuario_id, grupo_id, bloquear=None):
         WHERE g.grupo_id = %s
           AND d.usuario_id = %s
           AND u.rol = 'docente'
-          AND u.activo
-          AND d.activo
-          AND g.activo
         """ + clausula_bloqueo,
         (grupo_id, usuario_id),
     )
@@ -316,7 +303,7 @@ def obtener_horario_docente(usuario_id):
     try:
         with conexion.cursor() as cursor:
             if _perfil_autenticado(cursor, usuario_id) is None:
-                return [], "La cuenta no corresponde a un docente activo."
+                return [], "La cuenta no corresponde a un docente."
             cursor.execute(
                 """
                 SELECT g.grupo_id, g.clave_grupo, m.clave, m.nombre,
@@ -332,9 +319,6 @@ def obtener_horario_docente(usuario_id):
                     ON p.periodo_id = g.periodo_id
                 WHERE d.usuario_id = %s
                   AND u.rol = 'docente'
-                  AND u.activo
-                  AND d.activo
-                  AND g.activo
                 ORDER BY p.fecha_inicio DESC, m.semestre, g.clave_grupo,
                     m.clave,
                     CASE h.dia_semana

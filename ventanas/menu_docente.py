@@ -253,7 +253,7 @@ class VentanaMenuDocente(VentanaBase):
     def _crear_grupos(self):
         pagina, layout = self._crear_pagina(
             "MIS GRUPOS",
-            "Estos son los grupos activos que tienes asignados.",
+            "Estos son los grupos que tienes asignados.",
         )
         self.etiqueta_grupos = QLabel()
         self.etiqueta_grupos.setWordWrap(True)
@@ -605,12 +605,12 @@ class VentanaMenuDocente(VentanaBase):
             combo.blockSignals(False)
 
         self.etiqueta_grupos.setText(
-            f"Tienes {len(self._grupos)} grupo(s) activo(s) asignado(s)."
+            f"Tienes {len(self._grupos)} grupo(s) asignado(s)."
         )
         self._limpiar_layout(self.lista_grupos)
         if not self._grupos:
             self._agregar_mensaje_vacio(
-                self.lista_grupos, "No tienes grupos activos asignados."
+                self.lista_grupos, "No tienes grupos asignados."
             )
         for grupo in self._grupos:
             self.lista_grupos.insertWidget(
@@ -697,7 +697,7 @@ class VentanaMenuDocente(VentanaBase):
             self._datos_calificaciones = None
             self.tabla_calificaciones.setRowCount(0)
             self.etiqueta_estado_calificaciones.setText(
-                "No tienes grupos activos asignados."
+                "No tienes grupos asignados."
             )
             self.boton_guardar_calificaciones.setEnabled(False)
             return
@@ -846,7 +846,7 @@ class VentanaMenuDocente(VentanaBase):
             return
         if not grupos:
             self.etiqueta_horario.setText(
-                "No tienes grupos activos asignados."
+                "No tienes grupos asignados."
             )
             return
 
@@ -917,8 +917,8 @@ class VentanaMenuDocente(VentanaBase):
         self._datos_lista = None
         self.lista_alumnos.clear()
         if grupo_id is None:
-            self.etiqueta_lista.setText("No tienes grupos activos asignados.")
-            self.lista_alumnos.addItem("No tienes grupos activos asignados.")
+            self.etiqueta_lista.setText("No tienes grupos asignados.")
+            self.lista_alumnos.addItem("No tienes grupos asignados.")
             return
         datos, problema = obtener_estado_calificaciones(
             self.usuario_id, grupo_id

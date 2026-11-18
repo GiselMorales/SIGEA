@@ -20,50 +20,35 @@ class VentanaAltaDocente(VentanaAlta):
                     self.campo("apellido_materno", "Apellido materno"),
                     self.campo("nombre", "Nombre(s)"),
                 ),
-                self.fila(
-                    self.campo("fecha_nacimiento", "Fecha de nacimiento (dd/mm/aaaa)"),
-                    self.campo("curp", "CURP"),
-                    self.campo("rfc", "RFC"),
-                ),
-                self.fila(
-                    self.selector("sexo", "Sexo", v.SEXOS),
-                    None,
-                    pesos=(2, 3),
-                ),
+                self.fila(self.campo("rfc", "RFC"), None, pesos=(1, 2)),
             ],
-            lambda d: v.validar_datos_personales(
-                d, edad_min=21, edad_max=75, pedir_rfc=True, pedir_sangre=False
-            ),
+            self._validar_docente,
         )
 
-        self.agregar_seccion(
-            "DATOS ACADÉMICOS",
-            [
-                self.fila(
-                    self.selector("grado_academico", "Grado académico", v.GRADOS),
-                    None,
-                    pesos=(3, 2),
-                ),
-            ],
-            self._validar_grado,
-        )
+    @staticmethod
+    def _validar_docente(datos):
+        errores, limpio = {}, {}
+        for clave, etiqueta, obligatorio in (
+            ("apellido_paterno", "Apellido paterno", True),
+            ("apellido_materno", "Apellido materno", False),
+            ("nombre", "Nombre(s)", True),
+        ):
+            mensaje, valor = v._nombre(datos.get(clave), etiqueta, obligatorio)
+            limpio[clave] = valor
+            if mensaje:
+                errores[clave] = mensaje
+        mensaje, rfc = v._rfc(datos.get("rfc"))
+        limpio["rfc"] = rfc
+        if mensaje:
+            errores["rfc"] = mensaje
+        return errores, limpio
 
-    def _validar_grado(self, datos):
-        grado = (datos.get("grado_academico") or "").strip()
-        if grado not in v.GRADOS:
-            return {"grado_academico": "Grado académico: elige una opción."}, {}
-        return {}, {"grado_academico": grado}
-
-
-    
     def resumen_confirmacion(self, datos):
         apellidos = f"{datos.get('apellido_paterno', '')} {datos.get('apellido_materno') or ''}".strip()
         lineas = [
             ("Nombre(s)", datos.get("nombre")),
             ("Apellidos", apellidos),
             ("RFC", datos.get("rfc")),
-            ("CURP", datos.get("curp")),
-            ("Grado académico", datos.get("grado_academico")),
         ]
         aviso = (
             "Al registrar se crearán automáticamente:\n"

@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 
 import psycopg
@@ -14,6 +15,27 @@ MAX_INTENTOS = 3
 MENSAJE_LIMITE = "Superaste el límite de intentos. Regresa más tarde."
 
 _intentos_fallidos = 0
+
+
+def _contrasena_correcta(ingresada, guardada):
+    guardada = guardada or ""
+    if not guardada.startswith("pbkdf2_sha256$"):
+        return hmac.compare_digest(ingresada.encode("utf-8"), guardada.encode("utf-8"))
+
+    try:
+        algoritmo, iteraciones_texto, salt_texto, hash_texto = guardada.split("$")
+        iteraciones = int(iteraciones_texto)
+        if algoritmo != "pbkdf2_sha256" or not 1 <= iteraciones <= 2_000_000:
+            return False
+        salt = bytes.fromhex(salt_texto)
+        hash_esperado = bytes.fromhex(hash_texto)
+    except (ValueError, TypeError):
+        return False
+
+    hash_calculado = hashlib.pbkdf2_hmac(
+        "sha256", ingresada.encode("utf-8"), salt, iteraciones
+    )
+    return hmac.compare_digest(hash_calculado, hash_esperado)
 
 
 def limite_superado():
@@ -56,7 +78,7 @@ def autenticar(usuario, contrasena, tipo_usuario):
         with conexion.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT usuario_id, contrasena, rol, activo
+                SELECT usuario_id, contrasena, rol
                 FROM public.usuarios
                 WHERE nombre_usuario = %s
                 """,
@@ -68,16 +90,10 @@ def autenticar(usuario, contrasena, tipo_usuario):
             correcto, mensaje = _fallo("Usuario o contraseña incorrectos.")
             return correcto, mensaje, None, None
 
-        usuario_id, contrasena_guardada, rol_guardado, activo = registro
-
-        if not activo:
-            return False, "La cuenta está desactivada.", None, None
+        usuario_id, contrasena_guardada, rol_guardado = registro
 
         # comparación en tiempo constante
-        if not hmac.compare_digest(
-            contrasena.encode("utf-8"),
-            (contrasena_guardada or "").encode("utf-8"),
-        ):
+        if not _contrasena_correcta(contrasena, contrasena_guardada):
             correcto, mensaje = _fallo("Usuario o contraseña incorrectos.")
             return correcto, mensaje, None, None
 

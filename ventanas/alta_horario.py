@@ -178,7 +178,7 @@ class VentanaAltaHorario(VentanaAlta):
             return {"grupo_seleccion": f"No hay materias registradas para el semestre {semestre}."}, {}
         docentes = lh.listar_docentes()
         if not docentes:
-            return {"grupo_seleccion": "No hay docentes activos. Registra al menos uno en DOCENTE."}, {}
+            return {"grupo_seleccion": "No hay docentes registrados. Registra al menos uno en DOCENTE."}, {}
 
         self._cargar_panel(
             materias, docentes, lh.materias_en_grupo(periodo, clave),

@@ -1,15 +1,21 @@
 # reportes/generador_pdf.py
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.utils import ImageReader
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.platypus import (
+    PageBreak, SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle,
+)
 
 AZUL = colors.HexColor("#006BB3")
 AZUL_CLARO = colors.HexColor("#EDF3FD")
+ROSA = colors.HexColor("#D65383")
+ROSA_CLARO = colors.HexColor("#FCEAF1")
 
 
 def _archivo_recurso(nombre):
@@ -49,6 +55,41 @@ def _membrete(styles, ancho_total):
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
     ]))
+    return tabla
+
+
+def _membrete_institucional(styles, ancho_total):
+    """Membrete para los nuevos reportes académicos, usando ambos logos oficiales."""
+    campus = _archivo_recurso("logo-ita300.png") or _archivo_recurso("sigeacircular.png")
+    tec_nm = _archivo_recurso("Logotecnm300.png")
+    img_left = Image(str(campus), width=58, height=58) if campus else ""
+    img_right = Image(str(tec_nm), width=70, height=50) if tec_nm else ""
+    estilo = ParagraphStyle(
+        "MembreteAcademico",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=10,
+        leading=13,
+        alignment=1,
+    )
+    texto = Paragraph(
+        "<b>TECNOLÓGICO NACIONAL DE MÉXICO</b><br/>"
+        "<b>INSTITUTO TECNOLÓGICO DE ACAPULCO · CAMPUS ACAPULCO</b><br/>"
+        "<font size=8 color='#555555'>Sistema Integral de Gestión Escolar y Académica (SIGEA)</font>",
+        estilo,
+    )
+    tabla = Table(
+        [[img_left, texto, img_right]],
+        colWidths=[72, ancho_total - 144, 72],
+    )
+    tabla.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ]
+        )
+    )
     return tabla
 
 
@@ -139,12 +180,13 @@ def generar_pdf_oficial(datos_registro, ruta_salida):
 
 
 def generar_pdf_consulta(titulo, columnas, filas, ruta_salida,
-                         anchos=None, filtro="", resumen=""):
-    """PDF horizontal con una tabla de resultados.
+                         anchos=None, filtro="", resumen="",
+                         orientacion="landscape"):
+    """PDF de consulta con tabla de resultados, horizontal por defecto.
     columnas: ["No.", ...]   filas: [[valor, ...], ...]   anchos: puntos por columna."""
     Path(ruta_salida).parent.mkdir(parents=True, exist_ok=True)
 
-    pagina = landscape(letter)
+    pagina = letter if orientacion == "portrait" else landscape(letter)
     margen = 30
     ancho_util = pagina[0] - 2 * margen
 
@@ -187,9 +229,10 @@ def generar_pdf_consulta(titulo, columnas, filas, ruta_salida,
         anchos = [a * factor for a in anchos]
 
     tabla = Table(datos, colWidths=anchos, repeatRows=1)
+    color_filas = ROSA_CLARO if orientacion == "portrait" else AZUL_CLARO
     tabla.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), AZUL),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, AZUL_CLARO]),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, color_filas]),
         ("LINEBELOW", (0, 0), (-1, -1), 0.25, colors.HexColor("#C9D8EE")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 4),
@@ -207,6 +250,344 @@ def generar_pdf_consulta(titulo, columnas, filas, ruta_salida,
 
     doc.build(story, onFirstPage=pie, onLaterPages=pie)
     return ruta_salida
+
+
+def generar_pdf_constancia(datos, ruta_salida, incluir_calificaciones=False):
+    """Genera una constancia de estudios para las materias actualmente inscritas."""
+    Path(ruta_salida).parent.mkdir(parents=True, exist_ok=True)
+    pagina = letter
+    margen = 34
+    ancho_util = pagina[0] - 2 * margen
+    doc = SimpleDocTemplate(
+        str(ruta_salida),
+        pagesize=pagina,
+        rightMargin=margen,
+        leftMargin=margen,
+        topMargin=28,
+        bottomMargin=38,
+        title="Constancia de estudios",
+    )
+    styles = getSampleStyleSheet()
+    story = [_membrete_institucional(styles, ancho_util), Spacer(1, 16)]
+    titulo = ParagraphStyle(
+        "ConstanciaTitulo",
+        fontName="Helvetica-Bold",
+        fontSize=15,
+        alignment=1,
+        textColor=colors.HexColor("#1B396A"),
+    )
+    cuerpo = ParagraphStyle(
+        "ConstanciaCuerpo",
+        fontName="Helvetica",
+        fontSize=10,
+        leading=15,
+        alignment=4,
+    )
+    story.append(Paragraph("CONSTANCIA DE ESTUDIOS", titulo))
+    story.append(Spacer(1, 18))
+    story.append(
+        Paragraph(
+            "A quien corresponda:<br/><br/>"
+            "Por medio de la presente se hace constar que "
+            f"<b>{_texto(datos.get('nombre'))}</b>, con número de control "
+            f"<b>{_texto(datos.get('numero_control'))}</b>, se encuentra "
+            "registrado(a) en el sistema escolar del Instituto Tecnológico "
+            "de Acapulco.<br/><br/>"
+            f"<b>Carrera:</b> {_texto(datos.get('carrera'))} &nbsp;&nbsp; "
+            f"<b>Semestre:</b> {_texto(datos.get('semestre_actual'))} &nbsp;&nbsp; "
+            f"<b>Turno:</b> {_texto(datos.get('turno'))}<br/>"
+            f"<b>Estatus:</b> {_texto(datos.get('estado'))}<br/>"
+            f"<b>Fecha de emisión:</b> {datetime.now():%d/%m/%Y}",
+            cuerpo,
+        )
+    )
+    story.append(Spacer(1, 14))
+
+    materias = datos.get("materias", [])
+    if materias:
+        columnas = ["Periodo", "Sem.", "Grupo", "Clave", "Materia"]
+        if incluir_calificaciones:
+            columnas.extend(["Eval. 1", "Eval. 2", "Eval. 3", "Promedio final"])
+        estilo_celda = ParagraphStyle(
+            "ConstanciaCelda", fontName="Helvetica", fontSize=7, leading=9
+        )
+        estilo_cabecera = ParagraphStyle(
+            "ConstanciaCabecera",
+            fontName="Helvetica-Bold",
+            fontSize=7,
+            leading=9,
+            textColor=colors.white,
+        )
+        tabla_datos = [
+            [Paragraph(_texto(columna), estilo_cabecera) for columna in columnas]
+        ]
+        for materia in materias:
+            fila = [
+                materia["periodo"],
+                materia["semestre"],
+                materia["grupo"],
+                materia["clave"],
+                materia["materia"],
+            ]
+            if incluir_calificaciones:
+                fila.extend(
+                    materia[clave]
+                    for clave in (
+                        "evaluacion1", "evaluacion2", "evaluacion3", "promediofinal"
+                    )
+                )
+            tabla_datos.append(
+                [
+                    Paragraph(_texto(valor, "Pendiente"), estilo_celda)
+                    for valor in fila
+                ]
+            )
+        tabla = Table(
+            tabla_datos,
+            colWidths=(
+                [54, 32, 40, 42, 142, 48, 48, 48, 84]
+                if incluir_calificaciones
+                else [72, 40, 50, 60, 280]
+            ),
+            repeatRows=1,
+        )
+        tabla.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), AZUL),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ROSA_CLARO]),
+                    ("GRID", (0, 0), (-1, -1), 0.3, AZUL_CLARO),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ]
+            )
+        )
+        story.append(tabla)
+    else:
+        story.append(
+            Paragraph(
+                "No se encontraron materias actualmente inscritas para este alumno.",
+                cuerpo,
+            )
+        )
+
+    story.append(Spacer(1, 34))
+    firma = Table(
+        [
+            ["________________________________________"],
+            ["Nombre, firma y sello de Control Escolar"],
+        ],
+        colWidths=[270],
+    )
+    firma.setStyle(
+        TableStyle(
+            [
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ]
+        )
+    )
+    story.append(firma)
+    pie = _hacer_pie(pagina, margen)
+    doc.build(story, onFirstPage=pie, onLaterPages=pie)
+    return str(ruta_salida)
+
+
+def generar_pdf_estadisticas(
+    datos,
+    filtros,
+    grafica_alumnos_png,
+    grafica_genero_png,
+    grafica_semestre_png,
+    grafica_turno_png,
+    ruta_salida,
+):
+    """Genera un reporte vertical con las cuatro gráficas del tablero."""
+    Path(ruta_salida).parent.mkdir(parents=True, exist_ok=True)
+    pagina = letter
+    margen = 34
+    ancho_util = pagina[0] - 2 * margen
+    doc = SimpleDocTemplate(
+        str(ruta_salida),
+        pagesize=pagina,
+        rightMargin=margen,
+        leftMargin=margen,
+        topMargin=28,
+        bottomMargin=38,
+        title="Reporte estadístico de alumnos",
+    )
+    styles = getSampleStyleSheet()
+    story = [_membrete_institucional(styles, ancho_util), Spacer(1, 8)]
+    titulo = ParagraphStyle(
+        "EstadisticasTitulo",
+        fontName="Helvetica-Bold",
+        fontSize=14,
+        alignment=1,
+        textColor=colors.HexColor("#1B396A"),
+    )
+    informacion = ParagraphStyle(
+        "EstadisticasInfo",
+        fontName="Helvetica",
+        fontSize=9,
+        leading=12,
+        alignment=1,
+        textColor=colors.HexColor("#333333"),
+    )
+    story.append(Paragraph("REPORTE ESTADÍSTICO DE ALUMNOS", titulo))
+    story.append(Spacer(1, 6))
+    story.append(
+        Paragraph(
+            f"<b>Periodo:</b> {_texto(filtros.get('periodo'))} &nbsp;&nbsp; "
+            f"<b>Grupo:</b> {_texto(filtros.get('grupo'))}<br/>"
+            f"<b>Fecha de generación:</b> {datetime.now():%d/%m/%Y %H:%M}",
+            informacion,
+        )
+    )
+    story.append(Spacer(1, 10))
+
+    resumen_datos = [
+        [
+            "TOTAL DE ALUMNOS", str(datos["total_alumnos"]),
+            "TOTAL DE GRUPOS", str(datos["total_grupos"]),
+        ],
+        [
+            "HOMBRES", str(datos["hombres"]),
+            "MUJERES", str(datos["mujeres"]),
+        ],
+    ]
+    resumen = Table(
+        resumen_datos,
+        colWidths=[
+            ancho_util * 0.28, ancho_util * 0.16,
+            ancho_util * 0.28, ancho_util * 0.16,
+        ],
+        hAlign="CENTER",
+    )
+    resumen.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), AZUL),
+                ("BACKGROUND", (0, 1), (0, 1), AZUL),
+                ("BACKGROUND", (2, 1), (2, 1), ROSA),
+                ("BACKGROUND", (1, 0), (1, 1), AZUL_CLARO),
+                ("BACKGROUND", (3, 0), (3, 0), AZUL_CLARO),
+                ("BACKGROUND", (3, 1), (3, 1), ROSA_CLARO),
+                ("TEXTCOLOR", (0, 0), (0, 1), colors.white),
+                ("TEXTCOLOR", (2, 0), (2, 0), colors.white),
+                ("TEXTCOLOR", (2, 1), (2, 1), colors.white),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("BOX", (0, 0), (-1, -1), 0.5, AZUL_CLARO),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, AZUL_CLARO),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.append(resumen)
+    story.append(Spacer(1, 10))
+
+    estilo_grafica = ParagraphStyle(
+        "EstadisticasGraficaTitulo",
+        fontName="Helvetica-Bold",
+        fontSize=10,
+        leading=13,
+        textColor=colors.HexColor("#1B396A"),
+    )
+
+    def agregar_grafica(titulo_grafica, contenido_png):
+        imagen_ancho, imagen_alto = ImageReader(BytesIO(contenido_png)).getSize()
+        ancho = ancho_util
+        alto = ancho * imagen_alto / imagen_ancho
+        if alto > 188:
+            alto = 188
+            ancho = alto * imagen_ancho / imagen_alto
+        grafica = Image(BytesIO(contenido_png), width=ancho, height=alto)
+        grafica.hAlign = "CENTER"
+        story.append(Paragraph(titulo_grafica, estilo_grafica))
+        story.append(grafica)
+        story.append(Spacer(1, 6))
+
+    agregar_grafica("1. ALUMNOS INSCRITOS POR GRUPO", grafica_alumnos_png)
+    story.append(PageBreak())
+    story.append(_membrete_institucional(styles, ancho_util))
+    story.append(Spacer(1, 8))
+    agregar_grafica("2. DISTRIBUCIÓN POR SEXO", grafica_genero_png)
+    agregar_grafica("3. MATRÍCULA POR SEMESTRE", grafica_semestre_png)
+    agregar_grafica("4. DISTRIBUCIÓN POR TURNO", grafica_turno_png)
+    story.append(PageBreak())
+
+    columnas = ["Grupo", "Materias", "Sem.", "Turno", "Alumnos", "Hombres", "Mujeres"]
+    estilo_celda = ParagraphStyle(
+        "EstadisticasCelda", fontName="Helvetica", fontSize=8, leading=9
+    )
+    estilo_cabecera = ParagraphStyle(
+        "EstadisticasCabecera",
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        leading=9,
+        textColor=colors.white,
+    )
+    filas = [[Paragraph(_texto(columna), estilo_cabecera) for columna in columnas]]
+    for grupo in datos["grupos"]:
+        filas.append(
+            [
+                Paragraph(_texto(grupo["clave_grupo"]), estilo_celda),
+                Paragraph(_texto(grupo["materias"]), estilo_celda),
+                Paragraph(_texto(grupo["semestre"]), estilo_celda),
+                Paragraph(_texto(grupo["turno"]), estilo_celda),
+                str(grupo["alumnos"]),
+                str(grupo["hombres"]),
+                str(grupo["mujeres"]),
+            ]
+        )
+    tabla_grupos = Table(
+        filas,
+        colWidths=[54, 174, 42, 52, 65, 62, 62],
+        repeatRows=1,
+    )
+    tabla_grupos.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), AZUL),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ROSA_CLARO]),
+                ("GRID", (0, 0), (-1, -1), 0.3, AZUL_CLARO),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (2, 1), (-1, -1), "CENTER"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    story.append(Paragraph("ALUMNOS POR GRUPO", titulo))
+    story.append(Spacer(1, 6))
+    story.append(tabla_grupos)
+    story.append(Spacer(1, 14))
+    firma = Table(
+        [
+            ["________________________________________"],
+            ["Firma y validación administrativa"],
+        ],
+        colWidths=[280],
+    )
+    firma.setStyle(
+        TableStyle(
+            [
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ]
+        )
+    )
+    story.append(firma)
+    pie = _hacer_pie(pagina, margen)
+    doc.build(story, onFirstPage=pie, onLaterPages=pie)
+    return str(ruta_salida)
 
 
 # ----------------------------------------------------------------------

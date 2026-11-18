@@ -49,23 +49,34 @@ def _validar_nombre(valor, etiqueta, obligatorio=True):
     return nombre, None
 
 
-def _semestre_existente(cursor, numero_control):
+def _periodo_vigente(cursor):
     cursor.execute(
         """
-        SELECT semestre_actual
-        FROM public.reinscripcion_controles
-        WHERE numero_control = %s
-        UNION ALL
-        SELECT 2
-        FROM public.reinscripcion_segundo
-        WHERE numero_control = %s
-        UNION ALL
-        SELECT 3
-        FROM public.reinscripcion_tercero
-        WHERE numero_control = %s
-        LIMIT 1
+        SELECT periodo_id
+        FROM public.periodos_escolares
+        WHERE CURRENT_DATE BETWEEN fecha_inicio AND fecha_fin
+        ORDER BY fecha_inicio DESC
+        """
+    )
+    periodos = cursor.fetchall()
+    if not periodos:
+        raise ValueError("No hay un periodo escolar vigente para hoy.")
+    if len(periodos) != 1:
+        raise ValueError(
+            "Hay más de un periodo escolar vigente para hoy. "
+            "Corrige las fechas de los periodos."
+        )
+    return periodos[0][0]
+
+
+def _semestre_existente(cursor, numero_control, periodo_id):
+    cursor.execute(
+        """
+        SELECT semestre
+        FROM public.reinscripciones
+        WHERE numero_control = %s AND periodo_id = %s
         """,
-        (numero_control, numero_control, numero_control),
+        (numero_control, periodo_id),
     )
     fila = cursor.fetchone()
     return fila[0] if fila else None
@@ -81,8 +92,11 @@ def consultar_reinscripcion(numero_control):
         return None, "No fue posible conectar con la base de datos."
     try:
         with conexion.cursor() as cursor:
-            semestre = _semestre_existente(cursor, numero_control)
+            periodo_id = _periodo_vigente(cursor)
+            semestre = _semestre_existente(cursor, numero_control, periodo_id)
         return semestre, None
+    except ValueError as error:
+        return None, str(error)
     except psycopg.Error as error:
         print(f"Error al consultar reinscripción existente: {error}")
         return None, "No se pudo validar el número de control."
@@ -100,35 +114,31 @@ def consultar_reinscripciones(filtro=""):
         with conexion.cursor() as cursor:
             cursor.execute(
                 """
-                WITH reinscritos AS (
-                    SELECT numero_control, apellido_paterno, apellido_materno,
-                           nombres, semestre, turno, correo_institucional,
-                           fecha_registro
-                    FROM public.reinscripcion_segundo
-                    UNION ALL
-                    SELECT numero_control, apellido_paterno, apellido_materno,
-                           nombres, semestre, turno, correo_institucional,
-                           fecha_registro
-                    FROM public.reinscripcion_tercero
-                )
-                SELECT numero_control,
+                SELECT r.numero_control,
                        CONCAT_WS(
                            ' ',
-                           apellido_paterno,
-                           NULLIF(apellido_materno, ''),
-                           nombres
+                           a.apellido_paterno,
+                           NULLIF(a.apellido_materno, ''),
+                           a.nombres
                        ) AS nombre_completo,
-                       semestre, turno, correo_institucional, fecha_registro
-                FROM reinscritos
+                       r.semestre, COALESCE(h.turno, ''), a.correo_institucional,
+                       r.fecha_reinscripcion, p.nombre, r.estado
+                FROM public.reinscripciones AS r
+                JOIN public.alumnos AS a
+                  ON a.numero_control = r.numero_control
+                JOIN public.periodos_escolares AS p
+                  ON p.periodo_id = r.periodo_id
+                LEFT JOIN public.horarios_semestre AS h
+                  ON h.horario_semestre_id = r.horario_semestre_id
                 WHERE %s = ''
-                   OR numero_control ILIKE %s
+                   OR r.numero_control ILIKE %s
                    OR CONCAT_WS(
                        ' ',
-                       apellido_paterno,
-                       NULLIF(apellido_materno, ''),
-                       nombres
+                       a.apellido_paterno,
+                       NULLIF(a.apellido_materno, ''),
+                       a.nombres
                    ) ILIKE %s
-                ORDER BY fecha_registro DESC, apellido_paterno, nombres
+                ORDER BY r.fecha_reinscripcion DESC, a.apellido_paterno, a.nombres
                 """,
                 (filtro, patron, patron),
             )
@@ -141,6 +151,8 @@ def consultar_reinscripciones(filtro=""):
                 "turno": fila[3],
                 "correo": fila[4],
                 "fecha_registro": fila[5],
+                "periodo": fila[6],
+                "estado": fila[7],
             }
             for fila in filas
         ], None
@@ -159,7 +171,7 @@ def listar_horarios_semestre():
         with conexion.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT horario_semestre_id, semestre, turno, descripcion
+                SELECT horario_semestre_id, semestre, LOWER(turno), descripcion
                 FROM public.horarios_semestre
                 WHERE semestre IN (2, 3)
                 ORDER BY semestre, turno
@@ -183,6 +195,7 @@ def listar_horarios_semestre():
 
 
 def consultar_horario(semestre, turno):
+    turno = (turno or "").strip().lower()
     if semestre not in (2, 3) or turno not in ("matutino", "vespertino"):
         return None, "Selecciona un semestre y turno válidos."
     clave_grupo = {2: None, 3: "3M" if turno == "matutino" else "3V"}[semestre]
@@ -207,7 +220,7 @@ def consultar_horario(semestre, turno):
                 """
                 SELECT horario_semestre_id
                 FROM public.horarios_semestre
-                WHERE semestre = %s AND turno = %s
+                WHERE semestre = %s AND LOWER(turno) = %s
                 """,
                 (semestre, turno),
             )
@@ -220,8 +233,7 @@ def consultar_horario(semestre, turno):
                     FROM public.grupos AS gx
                     JOIN public.materias AS mx
                       ON mx.materia_id = gx.materia_id
-                    WHERE gx.activo
-                      AND mx.semestre = %s
+                    WHERE mx.semestre = %s
                       AND gx.turno = %s
                       {filtro_clave_disponible}
                 )
@@ -236,8 +248,7 @@ def consultar_horario(semestre, turno):
                 JOIN periodo_disponible AS p ON p.periodo_id = g.periodo_id
                 LEFT JOIN public.docentes AS d ON d.rfc = g.docente_rfc
                 LEFT JOIN public.horarios AS h ON h.grupo_id = g.grupo_id
-                WHERE g.activo
-                  AND m.semestre = %s
+                WHERE m.semestre = %s
                   AND g.turno = %s
                   {filtro_clave}
                 ORDER BY m.clave,
@@ -300,6 +311,7 @@ def registrar_reinscripcion(
     turno,
 ):
     numero_control = (numero_control or "").strip()
+    turno = (turno or "").strip().lower()
     valido, problema = validar_numero_control(numero_control, semestre)
     if not valido:
         return False, problema
@@ -325,18 +337,26 @@ def registrar_reinscripcion(
     try:
         with conexion:
             with conexion.cursor() as cursor:
-                existente = _semestre_existente(cursor, numero_control)
-                if existente:
+                periodo_id = _periodo_vigente(cursor)
+                existente = _semestre_existente(
+                    cursor, numero_control, periodo_id
+                )
+                promocion = (
+                    existente == 2
+                    and semestre == 3
+                    and numero_control.startswith("2632")
+                )
+                if existente and not promocion:
                     return False, (
                         f"El número de control ya está registrado en "
-                        f"{existente}° semestre."
+                        f"{existente}° semestre para el periodo vigente."
                     )
 
                 cursor.execute(
                     """
                     SELECT horario_semestre_id
                     FROM public.horarios_semestre
-                    WHERE semestre = %s AND turno = %s
+                    WHERE semestre = %s AND LOWER(turno) = %s
                     """,
                     (semestre, turno),
                 )
@@ -363,6 +383,8 @@ def registrar_reinscripcion(
                 )
                 mensaje = cursor.fetchone()[0]
         return True, mensaje
+    except ValueError as error:
+        return False, str(error)
     except psycopg.Error as error:
         print(f"Error al registrar reinscripción: {error}")
         detalle = getattr(error.diag, "message_primary", None) or str(error)
